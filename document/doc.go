@@ -1,0 +1,271 @@
+package document
+
+import (
+	"fmt"
+	// "os"
+	"strings"
+	// "text/template"
+	"github.com/kevinkenan/subtext/macros"
+	"github.com/kevinkenan/subtext/parse"
+	"github.com/kevinkenan/cobra"
+)
+
+// Document represents the text being processed.
+type Document struct {
+	Name     string
+	Packages []string
+	Output   string
+	Targets  []string
+	Metadata map[string]string
+	Text     string
+	Root     *parse.Section
+	macros   map[string]*macros.Macro
+}
+
+type RenderError struct {
+	message string
+}
+
+func (r RenderError) Error() string {
+	return r.message
+}
+
+// RenderExecution represents a render process and keeps track information
+// needed during the rendering.
+type Render struct {
+	*Document
+	ParagraphMode bool
+	InParagraph   bool // true indicates that execution is in a paragraph.
+	depth         int  // tracks recursion depth
+	skipNodeCount int  // skip the next nodes
+
+}
+
+// func NewRenderEngine(d *Document) *Render {
+// 	return new(Render{Document: d})
+// }
+
+func NewDoc() *Document {
+	d := Document{macros: make(map[string]*macros.Macro)}
+	d.AddParagraphMacros()
+	return &d
+}
+
+// func NewDoc() *Document {
+// 	var m *macros.Macro
+// 	// var opt macros.Optional
+// 	// macs := make(map[string]*macros.Macro)
+// 	opt := macros.Optional{Name: "second", Default: "def"}
+// 	d := Document{macros: make(map[string]*macros.Macro)}
+// 	m = macros.NewMacro("a", "<it>{{- .first -}}</it>{{.second}}", []string{"first"}, []*macros.Optional{&opt})
+// 	d.macros[m.Name] = m
+// 	m = macros.NewMacro("b", "<b>{{.first}}</b>", []string{"first"}, nil) //[]*Optional{&opt})
+// 	d.macros[m.Name] = m
+// 	m = macros.NewMacro("c", "<sc>{{.first}}</sc>", []string{"first"}, nil) //[]*Optional{&opt})
+// 	d.macros[m.Name] = m
+// 	m = macros.NewMacro("section", "<section>{{.first}}\n</section>", []string{"first"}, nil) //[]*Optional{&opt})
+// 	d.macros[m.Name] = m
+// 	// m = macros.NewMacro("begin", "•b{test}<body>\n•^(pm=on)", []string{"first"}, nil) //[]*Optional{&opt})
+// 	m = macros.NewMacro("begin", "<body>\n•b{test}\n", []string{"first"}, nil) //[]*Optional{&opt})
+// 	d.macros[m.Name] = m
+// 	// m = macros.NewMacro("end", "\n</body>•^(pm=off)•-\n", []string{"first"}, nil) //[]*Optional{&opt})
+// 	m = macros.NewMacro("end", "\n</body>\n", []string{"first"}, nil) //[]*Optional{&opt})
+// 	d.macros[m.Name] = m
+// 	return &d
+// }
+
+func (d *Document) AddMacro(m *macros.Macro) {
+	d.macros[m.Name] = m
+}
+
+func (d *Document) AddParagraphMacros() {
+	// Add sys.paragraph.* macros which are used when paragraph mode is off.
+	d.AddMacro(macros.NewMacro("sys.paragraph.begin", "{{.parbreak}}", []string{"parbreak"}, nil))
+	d.AddMacro(macros.NewMacro("sys.paragraph.end", "{{.parbreak}}", []string{"parbreak"}, nil))
+	// d.AddMacro(macros.NewMacro("paragraph.begin", "<p>", []string{"orig"}, nil))
+	// d.AddMacro(macros.NewMacro("paragraph.end", "</p>\n", []string{"orig"}, nil))
+	// Add paragraph.* macros which are used when paragraph mode is on.
+	d.AddMacro(macros.NewMacro("paragraph.begin", "", nil, []*macros.Optional{macros.NewOptional("ignore", "")}))
+	d.AddMacro(macros.NewMacro("paragraph.end", "\n\n", nil, []*macros.Optional{macros.NewOptional("ignore", "")}))
+}
+
+func (d *Document) Make() (s string, err error) {
+	r := &Render{Document: d, ParagraphMode: true}
+	s, err = MakeWith(d.Text, r)
+	return
+}
+
+// MakeWidth allows arbitrary text to be processed with an existing Render
+// context. Most of the time the Document's Make is used (which calls
+// MakeWith), but MakeWith itself is useful for handling macros embedded in
+// templates.
+func MakeWith(t string, r *Render) (s string, err error) {
+	defer func() {cobra.LogV("finished rendering")}()
+	defer func() {
+		if e := recover(); e != nil {
+			switch e.(type) {
+			case RenderError, parse.Error:
+				err = e.(error)
+			default:
+				panic(e)
+			}
+		}
+	}()
+	root, err := parse.Parse(r.Name, t)
+	if err != nil {
+		return "", err
+	} else {
+		cobra.LogV("rendering (render)")
+		return r.render(root), nil
+	}
+}
+
+func (r *Render) render(root *parse.Section) string {
+	cobra.Tag("render").LogV("begin render")
+	s := new(strings.Builder)
+	s.WriteString(r.renderSection(root))
+	return s.String()
+}
+
+func (r *Render) renderSection(n *parse.Section) string {
+	s := new(strings.Builder)
+	for _, l := range n.NodeList {
+		s.WriteString(r.renderNode(l))
+	}
+	return s.String()
+}
+
+func (r *Render) renderNode(n parse.Node) string {
+	if r.skipNodeCount > 0 {
+		cobra.Tag("render").WithField("skipNodeCount", r.skipNodeCount).LogV("skipping node")
+		r.skipNodeCount -= 1
+		return ""
+	}
+	r.depth += 1
+	if r.depth > 5 {
+		panic(RenderError{message: "exceeded call depth"})
+	}
+	s := new(strings.Builder)
+
+	switch n.(type) {
+	case *parse.Section:
+		cobra.Tag("render").LogV("rendering section node")
+		s.WriteString(r.renderSection(n.(*parse.Section)))
+	case *parse.Text:
+		cobra.Tag("render").LogV("rendering text node")
+		if r.ParagraphMode && !r.InParagraph {
+			r.InParagraph = true
+		}
+		s.WriteString(n.(*parse.Text).GetText())
+	case *parse.Cmd:
+		c := n.(*parse.Cmd)
+		cobra.Tag("render").WithField("argcount", len(c.ArgList)+len(c.ArgMap)).Add("name", c.NodeValue).LogV("rendering cmd node")
+		s.WriteString(r.processCmd(c))
+	case *parse.ErrorNode:
+		cobra.Tag("render").LogV("rendering error node")
+		s.WriteString(n.(*parse.ErrorNode).GetErrorMsg())
+	default:
+		panic(RenderError{message: fmt.Sprintf("unexpected node %q\n", n)})
+	}
+
+	cobra.Tag("render").LogV("done rendering a node")
+	r.depth -= 1
+	return s.String()
+}
+
+func (r *Render) renderNodeList(n parse.NodeList) string {
+	cobra.Tag("render").WithField("length", len(n)).LogV("rendering node list")
+	s := new(strings.Builder)
+	for _, l := range n {
+		s.WriteString(r.renderNode(l))
+	}
+	return s.String()
+}
+
+func isFollowedByParEnd(n *parse.Cmd) bool {
+	peek := n.Ahead().Ahead()
+	if c, ok := peek.(*parse.Cmd); ok {
+		cn := c.GetCmdName()
+		if cn == "sys.paragraph.end" {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *Render) processCmd(n *parse.Cmd) string {
+	name := n.GetCmdName()
+	cobra.Tag("render").WithField("cmd", name).LogV("rendering command (cmd)")
+	cmdLog := cobra.Tag("cmd")
+
+	// If we are in paragraph mode, scanner generated paragraphs (prefixed
+	// with "sys.") require extra processing to remove empty paragraphs. If
+	// the paragraph isn't empty, we remove the prefix so that regular
+	// paragraph handling is triggered.
+	if r.ParagraphMode {
+		switch {
+		case name == "sys.paragraph.begin" && isFollowedByParEnd(n):
+			cobra.Tag("render").LogfV("empty paragraph so skipping nodes")
+			r.skipNodeCount += 1
+			return ""
+		case name == "sys.paragraph.begin":
+			name = "paragraph.begin"
+		case name == "sys.paragraph.end":
+			name = "paragraph.end"
+		}
+	}
+
+	// Check to see if the command matches a macro definition.
+	m, found := r.macros[name]
+	if !found {
+		panic(RenderError{message: fmt.Sprintf("Line %d: macro %q not defined.", n.GetLineNum(), name)})
+	}
+	cmdLog.Copy().Strunc("macro", m.TemplateText).LogfV("retrieved macro definition")
+
+	args, err := m.ValidateArgs(n)
+	if err != nil {
+		panic(RenderError{message: fmt.Sprintf("Line %d: ValidateArgs failed on macro %q: %q", n.GetLineNum(), name, err)})
+	}
+	// The args are themselves nodes which contain text and commands. They
+	// need to be rendered as well.
+	// renArgs := map[string]string{}
+	// for k, v := range args {
+	// 	renArgs[k] = r.renderNodeList(v)
+	// }
+
+	// Load the validated args into a map for easy access.
+	renArgs := map[string]string{}
+	for k, v := range args {
+		renArgs[k] = v.String()
+		cmdLog.Copy().Strunc("arg", k).LogV("prepared command argument")
+	}
+
+	// Apply the command's arguments to the macro.
+	s, err := r.ExecuteMacro(renArgs, m)
+	if err != nil {
+		// fmt.Println(err)
+		panic(RenderError{fmt.Sprintf("error rendering macro %q: %s", name, err)})
+	}
+	cmdLog.Copy().Add("name", name).Logf("executed macro, ready for parsing")
+	
+	// Handle commands embedded in the macro.
+	output, err := parse.ParsePlain(name, s)
+	if err != nil {
+		panic(RenderError{message: fmt.Sprintf("Line %d: error in template for macro %q: %q", n.GetLineNum(), name, err)})
+	} else {
+		cmdLog.Copy().Add("nodes", output.Count()-1).LogfV("parsed macro, ready for rendering")
+		return r.render(output)
+	}
+
+	// cobra.Tag("cmd").LogfV(">> %q", s)
+	// return output.String()
+}
+
+func (r *Render) ExecuteMacro(data map[string]string, m *macros.Macro) (string, error) {
+	s := strings.Builder{}
+	err := m.Template.Delims(m.Ld, m.Rd).Option("missingkey=error").Execute(&s, data)
+	if err != nil {
+		return "", err
+	}
+	return s.String(), nil
+}

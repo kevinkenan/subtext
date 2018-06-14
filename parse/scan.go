@@ -31,8 +31,6 @@ const (
 	tokenEqual
 	tokenComma
 	tokenTilde
-	// tokenParagraphStart
-	// tokenParagraphEnd
 	tokenError // value holds the message produced by a scanning error.
 	tokenEOF   // The end of the input text.
 	// System Command Tokens
@@ -58,8 +56,6 @@ var tokenNames = []string{
 	"tokenEqual",
 	"tokenComma",
 	"tokenTilde",
-	// "tokenParagraphStart",
-	// "tokenParagraphEnd",
 	"tokenError",
 	"tokenEOF",
 	"tokenSysCmdStart",
@@ -746,14 +742,10 @@ func scanNewCommand(s *scanner) ƒ {
 	// Determine the command
 	switch r := s.peek(); {
 	case isAlphaNumeric(r):
-		// actual named command
-
 		if s.isHorizCmd(cr) {
 			// If we're not in a paragraph, this will start one for us.
-			cobra.Tag("scan").Add("horizCmd", s.isHorizCmd(cr)).LogV("needs a new paragraph")
 			s.insertParagraphBeginCmd()
 		} else {
-			cobra.Tag("scan").WithField("horizCmd", s.isHorizCmd(cr)).LogfV("needs to end this paragraph")
 			s.insertParagraphEndCmd()
 		}
 

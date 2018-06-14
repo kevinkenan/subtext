@@ -13,3 +13,8 @@ Packages:
 
     macros are the defined things that use templates, commands are what are
     issued on the command line. Directive
+
+  ```
+  go build && echo "a\n\nb" |./subtext make test -v --logalltags
+  
+  ```

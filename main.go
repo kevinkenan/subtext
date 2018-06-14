@@ -158,6 +158,7 @@ func MakeCmd(cmd *cobra.Command, args []string) error {
 	// }
 	d.Output = cobra.GetString("output")
 	d.Packages = cobra.GetStringSlice("packages")
+	d.Plain = cobra.GetBool("plain")
 	d.Text = string(input)
 	d.AddMacro(macros.NewMacro("paragraph.begin", "<p>", []string{"orig"}, nil))
 	d.AddMacro(macros.NewMacro("paragraph.end", "</p>\n\n", []string{"orig"}, nil))
@@ -294,6 +295,7 @@ func init() {
 	make.RunE = MakeCmd
 	make.AddFlags(
 		cobra.NewStringFlag("output", cobra.Opts().Abbr("o").Default("-").Desc("filesystem path of the output file")),
+		cobra.NewBoolFlag("plain", cobra.Opts().Default(false).Desc("process the text in plain mode")),
 		cobra.NewStringSliceFlag("packages", cobra.Opts().Abbr("p").Desc("macro package(s) to apply to input")))
 
 	walk := cobra.NewCommand("walk")

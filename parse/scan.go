@@ -793,9 +793,11 @@ func scanSimpleCmd(s *scanner) ƒ {
 		switch r := s.next(); {
 		case r == '{':
 			s.emit(tokenLeftCurly)
+
 			if s.verticalMode {
 				return s.enterTextBlock(simpleV)
 			}
+
 			return s.enterTextBlock(simpleH)
 		case r == '}':
 			s.emit(tokenRightCurly)
@@ -832,20 +834,25 @@ func scanCmdContext(s *scanner) ƒ {
 			s.emit(tokenRightSquare)
 			s.cmdDepth -= 1
 			cobra.Tag("scan").Add("line", s.line).LogV("done scanning extended command")
+
 			if s.cmdDepth < 1 && !s.isParScanOn() {
 				s.setParScanOn()
 				return scanBeginning
 			}
+
 			if s.verticalMode {
 				s.eatSpaces()
 			}
+
 			return scanText
 		case r == '{':
 			cobra.Tag("scan").Add("line", s.line).LogV("scan cmd argument")
 			s.emit(tokenLeftCurly)
+
 			if s.verticalMode {
 				return s.enterTextBlock(contextV)
 			}
+
 			return s.enterTextBlock(contextH)
 		case r == '}':
 			s.emit(tokenRightCurly)
@@ -955,12 +962,20 @@ func scanRunes(s *scanner) {
 // Scan comments that terminate at the end of the line.
 func scanEolComment(s *scanner) ƒ {
 	eol := strings.Index(s.input[s.pos:], "\n")
+
 	if eol == -1 {
 		// end of file.
 		s.jump(len(s.input[s.pos:]))
 		return scanText
 	}
+
 	s.jump(len("|") + eol)
+
+	if s.verticalMode {
+		cobra.LogV("VERTICAL MODE")
+		s.eatSpaces()
+	}
+
 	return scanText
 }
 

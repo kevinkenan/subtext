@@ -20,6 +20,7 @@ type Document struct {
 	Text     string
 	Root     *parse.Section
 	macros   map[string]*macros.Macro
+	Plain   bool // Don't generate paragraphs or aggressively eat whitespace
 }
 
 type RenderError struct {
@@ -90,7 +91,7 @@ func (d *Document) AddParagraphMacros() {
 }
 
 func (d *Document) Make() (s string, err error) {
-	r := &Render{Document: d, ParagraphMode: true}
+	r := &Render{Document: d, ParagraphMode: !d.Plain}
 	s, err = MakeWith(d.Text, r)
 	return
 }

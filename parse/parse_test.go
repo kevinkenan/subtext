@@ -3,7 +3,6 @@ package parse
 import (
 	"fmt"
 	// "strings"
-	"github.com/kevinkenan/subtext/verbose"
 	// "sort"
 	"testing"
 )
@@ -202,7 +201,6 @@ func TestParse(t *testing.T) {
 	tnum := -1
 	var start, end = 0, len(parParseTestCases)
 	if tnum > 0 {
-		verbose.OnLevel(2)
 		start = tnum
 		end = tnum + 1
 	}
@@ -213,7 +211,6 @@ func TestParsePlain(t *testing.T) {
 	tnum := -1
 	var start, end = 0, len(parseTestCases)
 	if tnum > 0 {
-		verbose.OnLevel(2)
 		start = tnum
 		end = tnum + 1
 	}

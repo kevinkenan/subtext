@@ -2,7 +2,6 @@ package parse
 
 import (
 	"fmt"
-	"github.com/kevinkenan/subtext/verbose"
 	"testing"
 )
 
@@ -976,7 +975,6 @@ func scanTest(t *testing.T, tests []testParCase) bool {
 	tnum := -1
 	var start, end = 0, len(tests)
 	if tnum > 0 {
-		verbose.OnLevel(2)
 		start = tnum
 		end = tnum + 1
 	}

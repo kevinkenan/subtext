@@ -16,23 +16,23 @@ import (
 type tokenType int
 
 const (
-	tokenText     tokenType = iota // Plain text.
-	tokenCmdStart                  // Indicates the start of a command definition.
-	tokenName
-	tokenRunes // A string of runes.
-	tokenLeftParenthesis
-	tokenRightParenthesis
-	tokenLeftSquare
-	tokenRightSquare
-	tokenLeftCurly
-	tokenRightCurly
-	tokenLeftAngle
-	tokenRightAngle
-	tokenEqual
-	tokenComma
-	tokenTilde
-	tokenError // value holds the message produced by a scanning error.
-	tokenEOF   // The end of the input text.
+	tokenText             tokenType = iota // Plain text.
+	tokenCmdStart                          // Indicates the start of a command definition.
+	tokenName                              // The token's name
+	tokenRunes                             // A string of runes.
+	tokenLeftParenthesis                   // (
+	tokenRightParenthesis                  // )
+	tokenLeftSquare                        // [
+	tokenRightSquare                       // ]
+	tokenLeftCurly                         // {
+	tokenRightCurly                        // }
+	tokenLeftAngle                         // <
+	tokenRightAngle                        // >
+	tokenEqual                             // =
+	tokenComma                             // ,
+	tokenTilde                             // ~
+	tokenError                             // value holds the message produced by a scanning error.
+	tokenEOF                               // The end of the input text.
 	// System Command Tokens
 	tokenSysCmdStart         // Indicates the start of system commands
 	tokenSysCmd              // A system command
@@ -82,10 +82,7 @@ func (t token) String() string {
 		return fmt.Sprintf("       {eof %d/%d}", t.loc, t.lnum)
 	case t.typeof == tokenError:
 		return fmt.Sprintf("       {error %d/%d}: %q", t.loc, t.lnum, t.value)
-	// case len(t.value) > 12:
-	// 	return fmt.Sprintf("%d %d/%d %.6s...%s|", t.typeof, t.loc, t.lnum, t.value, t.value[len(t.value)-5:])
 	default:
-		// return fmt.Sprintf("%d %d/%d %q|", t.typeof, t.loc, t.lnum, t.value)
 		return fmt.Sprintf("       %s: %q\n", tokenTypeLookup(t.typeof), t.value)
 	}
 	return ""
@@ -119,8 +116,7 @@ type scanner struct {
 	line          int        // number of newlines seen (starts at 1)
 	// cmdStack indicates if a command's text block was called from within a
 	// full command (with a context) or from a short command.
-	cmdStack []cmdType
-	// verticalMode bool // true if the scanner is in vertical mode
+	cmdStack     []cmdType
 	parMode      bool // true when the scanner is invoked with scan instead of scanPlain
 	allowParScan bool // When false, the scanner is not allowed to insert paragraphs.
 	parScannerOn bool // when true, the scanner generates paragraph commands
@@ -515,7 +511,6 @@ Loop:
 			}
 			cobra.Tag("scan").Add("line", s.line).Strunc("char", string(r)).LogV("done scanBeginning")
 			return scanText
-			// return s.errorf("unexpected character %q while scanning text", r)
 		}
 	}
 	s.emit(tokenEOF)
@@ -550,10 +545,8 @@ Loop:
 		case isAlphaNumeric(r):
 			if !s.isInsidePar() && s.isParScanOn() {
 				s.backup()
-				// s.acceptRun(spaceChars)
 				cobra.Tag("scan").WithField("length", len(s.input[s.start:s.pos])).Add("line", s.line).LogfV("alphanumeric buffer")
 				s.insertParagraphBeginCmd()
-				// cobra.Tag("scan").LogV("done insertParagraphBeginCmd")
 				s.next()
 			}
 		case isEndOfLine(r):

@@ -634,9 +634,9 @@ var parGenTestCases = []testParCase{
 		t.add(tkns(tokenEOF, ""))
 		return t.tokens
 	}()),
-	newParCase("initial paragraph", "\n\n \n \n1", "", "", func() []token {
+	newParCase("initial paragraph and whitespace", "\n\n \n \n1", "", "", func() []token {
 		t := NewTC()
-		t.add(newParSeq("begin", "\n\n \n \n"))
+		t.add(newParSeq("begin", ""))
 		t.add(tkns(tokenText, "1"))
 		t.add(newParSeq("end", ""))
 		t.add(tkns(tokenEOF, ""))
@@ -677,7 +677,7 @@ var parGenTestCases = []testParCase{
 	}()),
 	newParCase("middle paragraphs", "\n \n1\n\n \n2\n \n ", "\n \n", "\n \n ", func() []token {
 		t := NewTC()
-		t.add(newParSeq("begin", "\n \n"))
+		t.add(newParSeq("begin", ""))
 		t.add(tkns(tokenText, "1"))
 		t.add(newParSeq("end", "\n\n \n"))
 		t.add(newParSeq("begin", ""))
@@ -725,9 +725,9 @@ var parGenTestCases = []testParCase{
 		t.add(tkns(tokenEOF, ""))
 		return t.tokens
 	}()),
-	newParCase("initial space and command", " •a{}12", "", "", func() []token {
+	newParCase("initial space and command", "•a{}12", "", "", func() []token {
 		t := NewTC()
-		t.add(newParSeq("begin", " "))
+		t.add(newParSeq("begin", ""))
 		t.add(emptyCmdSeq("a", "H"))
 		t.add(tkns(tokenText, "12"))
 		t.add(newParSeq("end", ""))
@@ -748,7 +748,7 @@ var parGenTestCases = []testParCase{
 		t.add(tkns(tokenText, "a\n\nX"))
 		t.add(tkns(tokenRightCurly, "}"))
 		t.add(tkns(tokenRightSquare, "]"))
-		t.add(newParSeq("begin", " "))
+		t.add(newParSeq("begin", ""))
 		t.add(tkns(tokenCmdStart, "H"))
 		t.add(tkns(tokenName, "abc"))
 		t.add(newParSeq("end", "\n\n"))
@@ -866,7 +866,7 @@ var parGenTestCases = []testParCase{
 	}()),
 	newParCase("initial paragraph", "\n\n  \n\n1", "", "", func() []token {
 		t := NewTC()
-		t.add(newParSeq("begin", "\n\n  \n\n"))
+		t.add(newParSeq("begin", ""))
 		t.add(tkns(tokenText, "1"))
 		t.add(newParSeq("end", ""))
 		t.add(tkns(tokenEOF, ""))
@@ -937,7 +937,7 @@ func newParCase(name, input, init, term string, exp []token) testParCase {
 
 func TestScannerEmpty(t *testing.T) {
 	var tokens []token
-	scnr := scan("empty", "  ")
+	scnr := scan("empty", "\n\n  ")
 	for {
 		token := scnr.nextToken()
 		tokens = append(tokens, token)
@@ -945,17 +945,15 @@ func TestScannerEmpty(t *testing.T) {
 			break
 		}
 	}
-	if tokens == nil {
+	switch {
+	case tokens == nil:
 		t.Errorf("No tokens in TestScannerEmpty")
-	}
-	if len(tokens) != 2 {
+	case len(tokens) != 1:
 		t.Errorf("Wrong number of args in TestScannerEmpty. Got: %d", len(tokens))
-	}
-	if tokens[0].typeof != tokenText {
-		t.Errorf("Wrong token type in TestScannerEmpty")
-	}
-	if tokens[1].typeof != tokenEOF {
-		t.Errorf("Wrong token type in TestScannerEmpty")
+	// case tokens[0].typeof != tokenText:
+	// 	t.Errorf("Wrong token type in TestScannerEmpty")
+	case tokens[0].typeof != tokenEOF:
+		t.Errorf("Wrong token type in TestScannerEmpty %s", tokenTypeLookup(tokens[1].typeof))
 	}
 }
 

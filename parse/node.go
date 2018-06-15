@@ -2,9 +2,9 @@ package parse
 
 import (
 	"fmt"
+	"github.com/kevinkenan/cobra"
 	"sort"
 	"strings"
-	"github.com/kevinkenan/cobra"
 )
 
 // ----------------------------------------------------------------------------
@@ -66,7 +66,6 @@ func (p *Peek) Behind() Node {
 func (p *Peek) SetPrev(n Node) {
 	p.prev = n
 }
-
 
 // NodeList -------------------------------------------------------------------
 
@@ -240,7 +239,7 @@ type Text struct {
 
 func NewTextNode(t string) *Text {
 	cobra.Tag("node").LogfV("text")
-	return &Text{NodeType: nText, NodeValue: NodeValue(t),}
+	return &Text{NodeType: nText, NodeValue: NodeValue(t)}
 }
 
 func (t *Text) Details() string {
@@ -364,12 +363,12 @@ type Arguments struct {
 func NewCmdNode(name string, t *token) *Cmd {
 	cobra.Tag("node").LogV("cmd")
 	return &Cmd{
-		NodeType: nCmd,
+		NodeType:  nCmd,
 		NodeValue: NodeValue(name),
 		// NodeList{},
 		Arguments: Arguments{true, []NodeList{}, nil},
-		Flags: []string{},
-		cmdToken: t,
+		Flags:     []string{},
+		cmdToken:  t,
 	}
 }
 

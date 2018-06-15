@@ -1,13 +1,13 @@
 package main
 
 import (
-	"fmt"
-	"os"
-	"io"
-	"io/ioutil"
 	"bufio"
+	"fmt"
 	"github.com/kevinkenan/subtext/document"
 	"github.com/kevinkenan/subtext/macros"
+	"io"
+	"io/ioutil"
+	"os"
 	// "strings"
 	// "text/template"
 	"github.com/kevinkenan/subtext/parse"
@@ -59,7 +59,7 @@ import (
 // 	for _, l := range n {
 // 		s.WriteString(renderNode(l, d))
 // 	}
-// 	return s.String()	
+// 	return s.String()
 // }
 
 // func processMacro(n *parse.Cmd, d *doc) string {
@@ -113,7 +113,6 @@ import (
 // 	d.macros[m.Name] = m
 // 	return &d
 // }
-
 
 func AppMain(c *cobra.Command, s []string) error {
 	cobra.Out("subtext says hello")
@@ -177,8 +176,6 @@ func MakeCmd(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-
-
 func WalkCmd(cmd *cobra.Command, args []string) {
 	cobra.Log("beginning walk cmd")
 	cmd.SilenceUsage = true
@@ -194,7 +191,7 @@ func WalkCmd(cmd *cobra.Command, args []string) {
 				break
 			}
 			if err != nil {
-				return 
+				return
 			}
 			input = append(input, in)
 		}
@@ -204,7 +201,7 @@ func WalkCmd(cmd *cobra.Command, args []string) {
 			name = f
 			in, err := ioutil.ReadFile(f)
 			if err != nil {
-				return 
+				return
 			}
 			input = in
 		}
@@ -322,14 +319,10 @@ func main() {
 	// verbose.LogAll("subtext is done, goodbye")
 	// verbose.CloseVerboseLog()
 
-
-
-
 	// err := commands.Execute()
 	// if err != nil {
 	// 	fmt.Println(err)
 	// }
-
 
 	// // runTempTest()
 	// d := NewDoc()

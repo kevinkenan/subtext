@@ -977,8 +977,8 @@ func scanTest(t *testing.T, tests []testParCase) bool {
 		end = tnum + 1
 	}
 	for tn, tc := range tests[start:end] {
-	// verbose.Off()
-	// for tn, tc := range tests {
+		// verbose.Off()
+		// for tn, tc := range tests {
 		result := runTest(&tc)
 		expResult := tc.exp
 		if !equal(result, expResult, tc.loc) {

@@ -32,7 +32,7 @@ func ParsePlain(name, input string) (*Section, error) {
 
 func doParse(n string, p *parser) (*Section, error) {
 	cobra.WithField("name", n).LogV("parsing (parse)")
-	p.prevNode = p.root  // Node(p.root)?
+	p.prevNode = p.root // Node(p.root)?
 	return p.start()
 
 }
@@ -43,12 +43,12 @@ func doParse(n string, p *parser) (*Section, error) {
 
 // parser represents the current state of the parser.
 type parser struct {
-	scanner  *scanner //
-	root     *Section // Root node of the tree.
+	scanner *scanner //
+	root    *Section // Root node of the tree.
 	// depth    int
-	input    string
-	empty    bool   // true if the buffer is empty.
-	buffer   *token // holds the next token if we peek or backup.
+	input  string
+	empty  bool   // true if the buffer is empty.
+	buffer *token // holds the next token if we peek or backup.
 	// cmdDepth int
 	prevNode Node // the previous node
 }

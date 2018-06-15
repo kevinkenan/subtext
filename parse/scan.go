@@ -119,11 +119,10 @@ type scanner struct {
 	line          int        // number of newlines seen (starts at 1)
 	// cmdStack indicates if a command's text block was called from within a
 	// full command (with a context) or from a short command.
-	cmdStack     []cmdType
+	cmdStack []cmdType
 	// verticalMode bool // true if the scanner is in vertical mode
 	parMode      bool // true when the scanner is invoked with scan instead of scanPlain
 	allowParScan bool // When false, the scanner is not allowed to insert paragraphs.
-	sendFirstPar bool // set to false once the first paragraph has been emitted
 	parScannerOn bool // when true, the scanner generates paragraph commands
 	parScanFlag  bool // set by ¶ command
 	parOpen      bool // tracks if every par begin is matched by a par end
@@ -141,7 +140,6 @@ func NewScanner(name, input string) *scanner {
 		line:          1,
 		allowParScan:  true,
 		parMode:       true,
-		sendFirstPar:  true,
 		parScannerOn:  true,
 		parScanFlag:   true,
 		parOpen:       false,
@@ -151,8 +149,8 @@ func NewScanner(name, input string) *scanner {
 type cmdType int
 
 const (
-	short cmdType = iota  // short command
-	full                  // full command
+	short cmdType = iota // short command
+	full                 // full command
 )
 
 // scan generates paragraph commands while tokenizing the input string.
@@ -169,7 +167,6 @@ func scanPlain(name, input string) *scanner {
 	s := NewScanner(name, input)
 	s.allowParScan = false
 	s.parMode = false
-	s.sendFirstPar = false
 	s.parScannerOn = false
 	s.parScanFlag = false
 	s.parOpen = false
@@ -246,17 +243,6 @@ func (s *scanner) setInsidePar(b bool) bool {
 		s.parOpen = b
 	}
 	return s.parOpen
-}
-
-func (s *scanner) isSendFirstPar() bool {
-	return s.allowParScan && s.sendFirstPar
-}
-
-func (s *scanner) setSendFirstPar(b bool) bool {
-	if s.allowParScan {
-		s.sendFirstPar = b
-	}
-	return s.sendFirstPar
 }
 
 // pushCmdTextExit is called when you enter a text block
@@ -446,21 +432,6 @@ func (s *scanner) emitRawToken(t tokenType) {
 // emitted as is.
 func (s *scanner) emit(t tokenType) {
 	switch {
-	case s.isSendFirstPar() && t == tokenText && s.cmdDepth == 0:
-		if s.isParScanOn() && s.start < s.pos {
-			// s.setParScanOn()
-			// s.setInsidePar(true)
-			// s.setSendFirstPar(false)
-			// s.emitInsertedToken(tokenCmdStart, "")
-			// s.emitInsertedToken(tokenName, "sys.paragraph.begin")
-			// s.emitInsertedToken(tokenLeftSquare, "[")
-			// s.emitInsertedToken(tokenLeftCurly, "{")
-			// s.emitInsertedToken(tokenRightCurly, "}")
-			// s.emitInsertedToken(tokenRightSquare, "]")
-		}
-		if s.start < s.pos {
-			s.emitRawToken(t)
-		}
 	case t == tokenText:
 		if s.start < s.pos {
 			s.emitRawToken(t)
@@ -559,7 +530,6 @@ func (s *scanner) sendInitialParagraph() (sent bool) {
 		cobra.Tag("scan").LogV("insertParagraphBeginCmd (initial par)")
 		s.setParScanOn()
 		s.setInsidePar(true)
-		s.setSendFirstPar(false)
 		s.emitInsertedToken(tokenCmdStart, "")
 		s.emitInsertedToken(tokenName, "sys.paragraph.begin")
 		s.emitInsertedToken(tokenLeftSquare, "[")
@@ -568,7 +538,7 @@ func (s *scanner) sendInitialParagraph() (sent bool) {
 		s.emitInsertedToken(tokenRightCurly, "}")
 		s.emitInsertedToken(tokenRightSquare, "]")
 		sent = true
-	} 
+	}
 	return
 }
 
@@ -580,9 +550,8 @@ Loop:
 		case isAlphaNumeric(r):
 			if !s.isInsidePar() && s.isParScanOn() {
 				s.backup()
-				s.setSendFirstPar(false)
 				// s.acceptRun(spaceChars)
-				cobra.Tag("scan").WithField("length",len(s.input[s.start:s.pos])).Add("line", s.line).LogfV("alphanumeric buffer")
+				cobra.Tag("scan").WithField("length", len(s.input[s.start:s.pos])).Add("line", s.line).LogfV("alphanumeric buffer")
 				s.insertParagraphBeginCmd()
 				// cobra.Tag("scan").LogV("done insertParagraphBeginCmd")
 				s.next()
@@ -663,7 +632,7 @@ Loop:
 	}
 
 	cobra.Tag("scan").LogV("finishing scanText")
-	
+
 	if s.pos > s.start {
 		if s.isParScanOn() {
 			s.insertParagraphBeginCmd()
@@ -671,11 +640,11 @@ Loop:
 		cobra.Tag("scan").Add("line", s.line).LogV("flushing token buffer (tokens)")
 		s.emit(tokenText)
 	}
-	
+
 	if s.isInsidePar() {
 		s.insertParagraphEndCmd()
 	}
-	
+
 	s.emit(tokenEOF)
 	cobra.Tag("scan").WithField("name", s.name).Add("line", s.line).LogV("completed scan")
 	return nil

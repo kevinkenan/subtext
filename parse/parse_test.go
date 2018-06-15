@@ -193,7 +193,7 @@ var parParseTestCases = []parseTestCase{
 		"•sys.paragraph.begin[<>{}]1\n\n2•sys.paragraph.end[<>{\n\n}]•sys.paragraph.begin[<>{}]3•sys.paragraph.end[<>{\n}]",
 		13, false, false},
 	{"line breaks with parscan flag off", "¶-\n\n1\n\n2\n\n3\n", "\n\n1\n\n2\n\n3\n", 3, false, false},
-	{"vertical mode test", "\n\n§a{b}\n\ncde\n", 
+	{"vertical mode test", "\n\n§a{b}\n\ncde\n",
 		"•sys.paragraph.begin[<>{}]•sys.paragraph.end[<>{}]•a[<>{b}]•sys.paragraph.begin[<>{}]cde•sys.paragraph.end[<>{\n}]", 12, false, false},
 }
 

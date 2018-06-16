@@ -164,6 +164,7 @@ func MakeCmd(cmd *cobra.Command, args []string) error {
 	d.AddMacro(macros.NewMacro("title", "<h1>{{.text}}</h1>\n\n", []string{"text"}, nil))
 	d.AddMacro(macros.NewMacro("section", "<h2>{{.text}}</h2>\n\n", []string{"text"}, nil))
 	d.AddMacro(macros.NewMacro("emph", "<i>{{.text}}</i>", []string{"text"}, nil))
+	d.AddMacro(macros.NewMacro("chapter", "<chapter>¶+{{.text}}</chapter>", []string{"text"}, nil))
 	output, err := d.Make()
 	if err != nil {
 		return err

@@ -112,7 +112,15 @@ func MakeWith(t string, r *Render) (s string, err error) {
 			}
 		}
 	}()
-	root, err := parse.Parse(r.Name, t)
+
+	var root *parse.Section
+
+	if r.ParagraphMode {
+		root, err = parse.Parse(r.Name, t)
+	} else {
+		root, err = parse.ParsePlain(r.Name, t)
+	}
+
 	if err != nil {
 		return "", err
 	} else {

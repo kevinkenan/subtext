@@ -198,7 +198,7 @@ func (s *scanner) isParScanFlag() bool {
 }
 
 func (s *scanner) setParScanFlag(b bool) bool {
-	cobra.Tag("scan").WithField("state", b).LogfV("setting paragraph scanning state")
+	cobra.Tag("scan").WithField("state", b).LogV("setting paragraph scanning state")
 	if s.allowParScan {
 		s.parScanFlag = b
 	} else {
@@ -212,17 +212,16 @@ func (s *scanner) isParScanOn() bool {
 }
 
 func (s *scanner) setParScanOff() bool {
-	cobra.Tag("scan").LogV("turning paragraph scanning off")
 	return s.setParScan(false)
 }
 
 func (s *scanner) setParScanOn() bool {
-	cobra.Tag("scan").LogV("turning paragraph scanning on")
 	return s.setParScan(true)
 }
 
 func (s *scanner) setParScan(b bool) bool {
 	if s.allowParScan {
+		cobra.Tag("scan").WithField("parscan", b).LogV("setting parscan")
 		s.parScannerOn = b
 	} else {
 		cobra.WithField("line", s.line).LogV("paragraph scanning is not allowed")
@@ -518,7 +517,7 @@ Loop:
 	return nil
 }
 
-// sendInitialParagraph sends a paragraph when needed at the beginnine of the
+// sendInitialParagraph sends a paragraph when needed at the beginning of the
 // document and whenever paragraph scanning is turned back on.
 func (s *scanner) sendInitialParagraph() (sent bool) {
 	if s.isParScanOn() && s.isParScanFlag() && !s.isInsidePar() {
@@ -533,6 +532,9 @@ func (s *scanner) sendInitialParagraph() (sent bool) {
 		s.emitInsertedToken(tokenRightCurly, "}")
 		s.emitInsertedToken(tokenRightSquare, "]")
 		sent = true
+	} else {
+		cobra.Tag("scan").LogV("no initial paragraph")
+		s.emit(tokenText)
 	}
 	return
 }
@@ -660,7 +662,7 @@ func (s *scanner) insertParagraphBeginCmd() {
 }
 
 func (s *scanner) insertParagraphEndCmd() {
-	if !s.isInsidePar() && s.isParScanOn() {
+	if !s.isInsidePar() || !s.isParScanOn() {
 		cobra.Tag("scan").LogV("aborting insertParagraphEndCmd")
 		return
 	}
@@ -712,6 +714,7 @@ func scanNewCommand(s *scanner) ƒ {
 			// If we're not in a paragraph, this will start one for us.
 			s.insertParagraphBeginCmd()
 		case !s.isHorizCmd(cr):
+			s.emit(tokenText)
 			s.insertParagraphEndCmd()
 		}
 

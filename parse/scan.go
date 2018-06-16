@@ -477,7 +477,7 @@ Loop:
 			case nxt == '+':
 				cobra.Tag("scan").Add("line", s.line).LogV("¶+")
 				s.ignore()
-				if !s.isParScanOn() {
+				if s.isParMode() && !s.isParScanFlag() {
 					cobra.Tag("scan").LogV("turning paragraph scan on")
 					s.setParScanFlag(true)
 					s.setParScanOn()
@@ -486,7 +486,7 @@ Loop:
 			case nxt == '-':
 				cobra.Tag("scan").Add("line", s.line).LogV("¶-")
 				s.ignore()
-				if s.isParScanOn() {
+				if s.isParMode() && s.isParScanFlag() {
 					cobra.Tag("scan").LogV("turning paragraph scan off")
 					if s.isInsidePar() {
 						cobra.Tag("scan").LogV("flushing open paragraph")
@@ -573,7 +573,7 @@ Loop:
 			case nxt == '+':
 				cobra.Tag("scan").Add("line", s.line).LogV("encountered ¶+")
 				s.ignore()
-				if !s.isParScanOn() {
+				if s.isParMode() && !s.isParScanOn() {
 					cobra.Tag("scan").LogV("turning paragraph scan on")
 					s.setParScanFlag(true)
 					s.setParScanOn()
@@ -582,7 +582,7 @@ Loop:
 			case nxt == '-':
 				cobra.Tag("scan").Add("line", s.line).LogV("encountered ¶-")
 				s.ignore()
-				if s.isParScanOn() {
+				if s.s.isParMode() && isParScanOn() {
 					cobra.Tag("scan").LogV("turning paragraph scan off")
 					s.setParScanFlag(false)
 					s.setParScanOff()

@@ -750,8 +750,8 @@ func scanNewCommand(s *scanner) ƒ {
 		return scanText
 	case r == '(':
 		s.emit(tokenSysCmdStart)
-		scanSysCmd(s)
-		return scanText
+		return scanSysCmd
+		// return scanText
 	case r == '_': // space eater
 		cobra.Tag("scan").Add("line", s.line).LogV("eating spaces")
 		s.jumpNextRune()
@@ -881,7 +881,7 @@ func scanName(s *scanner) {
 }
 
 // scanSysCmd creates a  sysCmd token.
-func scanSysCmd(s *scanner) {
+func scanSysCmd(s *scanner) ƒ {
 	// cobra.Tag("scan").LogV("system command")
 	s.next()
 	s.emit(tokenLeftParenthesis)
@@ -896,13 +896,14 @@ func scanSysCmd(s *scanner) {
 				s.emit(tokenSysCmd)
 			}
 
+			s.emit(tokenRightParenthesis)
+
 			s.next()
 			pk := s.peek()
-			if pk == '}' {
-				return s.enterTextBlock(syscmd)
+			if pk == '{' {
+				return ScanFullCmd
 			}
 
-			s.emit(tokenRightParenthesis)
 			run = false
 		case r == ',':
 			if s.pos > s.start {
@@ -923,7 +924,7 @@ func scanSysCmd(s *scanner) {
 			return
 		}
 	}
-	return
+	return scanText
 }
 
 // scanRunes creates a token of arbitrary runes.

@@ -116,12 +116,13 @@ type scanner struct {
 	line          int        // number of newlines seen (starts at 1)
 	// cmdStack indicates if a command's text block was called from within a
 	// full command (with a context) or from a short command.
-	cmdStack     []cmdType
-	parMode      bool // true when the scanner is invoked with scan instead of scanPlain
-	allowParScan bool // When false, the scanner is not allowed to insert paragraphs.
-	parScannerOn bool // when true, the scanner generates paragraph commands
-	parScanFlag  bool // set by ¶ command
-	parOpen      bool // tracks if every par begin is matched by a par end
+	cmdStack           []cmdType
+	parMode            bool // true when the scanner is invoked with scan instead of scanPlain
+	diableParScanFlags bool // when true, the scanner ignores ¶ commands
+	allowParScan       bool // When false, the scanner is not allowed to insert paragraphs
+	parScannerOn       bool // when true, the scanner generates paragraph commands
+	parScanFlag        bool // set by ¶ command
+	parOpen            bool // tracks if every par begin is matched by a par end
 }
 
 func NewScanner(name, input string) *scanner {
@@ -147,6 +148,7 @@ type cmdType int
 const (
 	short cmdType = iota // short command
 	full                 // full command
+	syscmd
 )
 
 // scan generates paragraph commands while tokenizing the input string.
@@ -161,7 +163,7 @@ func scan(name, input string) *scanner {
 func scanPlain(name, input string) *scanner {
 	cobra.Tag("scan").WithField("name", name).LogV("scanning input in plain mode (scan)")
 	s := NewScanner(name, input)
-	s.allowParScan = false
+	s.allowParScan = true
 	s.parMode = false
 	s.parScannerOn = false
 	s.parScanFlag = false
@@ -186,11 +188,15 @@ func (s *scanner) run() {
 }
 
 func (s *scanner) isParScanAllowed() bool {
-	return s.allowParScan
+	return s.isParMode() && s.isParScanFlag()
 }
 
 func (s *scanner) isParMode() bool {
 	return s.parMode && s.allowParScan
+}
+
+func (s *scanner) isParScanFlagDisabled() bool {
+	return s.diableParScanFlags
 }
 
 func (s *scanner) isParScanFlag() bool {
@@ -198,17 +204,23 @@ func (s *scanner) isParScanFlag() bool {
 }
 
 func (s *scanner) setParScanFlag(b bool) bool {
-	cobra.Tag("scan").WithField("state", b).LogV("setting paragraph scanning state")
-	if s.allowParScan {
+	cobra.Tag("scan").WithField("state", b).LogV("setting parscan flag")
+	if !s.diableParScanFlags {
 		s.parScanFlag = b
 	} else {
-		cobra.Tag("scan").LogV("paragraph scannnig is not allowed")
+		cobra.Tag("scan").LogV("paragraph flags are disabled")
 	}
 	return s.parScanFlag
 }
 
 func (s *scanner) isParScanOn() bool {
-	return s.parScannerOn && s.allowParScan && s.parMode && s.parScanFlag
+	// return s.parScannerOn && s.allowParScan && s.parMode && s.parScanFlag
+	return s.parScannerOn
+}
+
+func (s *scanner) isParScanOff() bool {
+	// return s.parScannerOn && s.allowParScan && s.parMode && s.parScanFlag
+	return !s.parScannerOn
 }
 
 func (s *scanner) setParScanOff() bool {
@@ -220,7 +232,7 @@ func (s *scanner) setParScanOn() bool {
 }
 
 func (s *scanner) setParScan(b bool) bool {
-	if s.allowParScan {
+	if true { //s.allowParScan {
 		cobra.Tag("scan").WithField("parscan", b).LogV("setting parscan")
 		s.parScannerOn = b
 	} else {
@@ -234,7 +246,7 @@ func (s *scanner) isInsidePar() bool {
 }
 
 func (s *scanner) setInsidePar(b bool) bool {
-	if s.allowParScan {
+	if true { //s.allowParScan {
 		s.parOpen = b
 	}
 	return s.parOpen
@@ -438,6 +450,7 @@ func (s *scanner) emit(t tokenType) {
 
 // emitSysCmd passes a system command token to the client.
 func (s *scanner) emitSysCmd(t tokenType, args string) {
+	cobra.Tag("tokens").Strunc("value", string(s.input[s.start:s.pos])).LogfV("emitSysCmd")
 	s.tokens <- token{
 		typeof: t,
 		loc:    s.start,
@@ -477,7 +490,7 @@ Loop:
 			case nxt == '+':
 				cobra.Tag("scan").Add("line", s.line).LogV("¶+")
 				s.ignore()
-				if s.isParMode() && !s.isParScanFlag() {
+				if !s.isParScanFlagDisabled() {
 					cobra.Tag("scan").LogV("turning paragraph scan on")
 					s.setParScanFlag(true)
 					s.setParScanOn()
@@ -486,7 +499,7 @@ Loop:
 			case nxt == '-':
 				cobra.Tag("scan").Add("line", s.line).LogV("¶-")
 				s.ignore()
-				if s.isParMode() && s.isParScanFlag() {
+				if !s.isParScanFlagDisabled() {
 					cobra.Tag("scan").LogV("turning paragraph scan off")
 					if s.isInsidePar() {
 						cobra.Tag("scan").LogV("flushing open paragraph")
@@ -520,7 +533,7 @@ Loop:
 // sendInitialParagraph sends a paragraph when needed at the beginning of the
 // document and whenever paragraph scanning is turned back on.
 func (s *scanner) sendInitialParagraph() (sent bool) {
-	if s.isParScanOn() && s.isParScanFlag() && !s.isInsidePar() {
+	if s.isParScanOn() && !s.isInsidePar() {
 		cobra.Tag("scan").LogV("insertParagraphBeginCmd (initial par)")
 		s.setParScanOn()
 		s.setInsidePar(true)
@@ -573,7 +586,7 @@ Loop:
 			case nxt == '+':
 				cobra.Tag("scan").Add("line", s.line).LogV("encountered ¶+")
 				s.ignore()
-				if s.isParMode() && !s.isParScanOn() {
+				if !s.isParScanFlagDisabled() {
 					cobra.Tag("scan").LogV("turning paragraph scan on")
 					s.setParScanFlag(true)
 					s.setParScanOn()
@@ -582,7 +595,7 @@ Loop:
 			case nxt == '-':
 				cobra.Tag("scan").Add("line", s.line).LogV("encountered ¶-")
 				s.ignore()
-				if s.s.isParMode() && isParScanOn() {
+				if !s.isParScanFlagDisabled() {
 					cobra.Tag("scan").LogV("turning paragraph scan off")
 					s.setParScanFlag(false)
 					s.setParScanOff()
@@ -646,7 +659,7 @@ Loop:
 }
 
 func (s *scanner) insertParagraphBeginCmd() {
-	if s.isInsidePar() || !s.isParScanOn() {
+	if s.isInsidePar() || s.isParScanOff() {
 		cobra.Tag("scan").LogV("aborting insertParagraphBeginCmd")
 		return
 	}
@@ -662,7 +675,7 @@ func (s *scanner) insertParagraphBeginCmd() {
 }
 
 func (s *scanner) insertParagraphEndCmd() {
-	if !s.isInsidePar() || !s.isParScanOn() {
+	if !s.isInsidePar() || s.isParScanOff() {
 		cobra.Tag("scan").LogV("aborting insertParagraphEndCmd")
 		return
 	}
@@ -730,9 +743,10 @@ func scanNewCommand(s *scanner) ƒ {
 		}
 
 		cobra.Tag("scan").LogV("done scanning bare command")
-		if s.cmdDepth < 1 && !s.isParScanOn() {
+		if s.cmdDepth < 1 && s.isParScanAllowed() && s.isParScanOff() {
 			s.setParScanOn()
 		}
+
 		return scanText
 	case r == '(':
 		s.emit(tokenSysCmdStart)
@@ -799,13 +813,13 @@ func scanFullCmd(s *scanner) ƒ {
 			s.cmdDepth -= 1
 			cobra.Tag("scan").Add("line", s.line).LogV("done scanning extended command")
 
-			if s.cmdDepth < 1 && !s.isParScanOn() {
+			if s.cmdDepth < 1 && s.isParScanAllowed() && s.isParScanOff() {
 				s.setParScanOn()
 				return scanBeginning
 			}
 
 			if s.isParScanOn() {
-				s.eatSpaces()
+				s.eatSpaces() // This could probably go in the if block immediately above.
 			}
 
 			return scanText
@@ -868,7 +882,7 @@ func scanName(s *scanner) {
 
 // scanSysCmd creates a  sysCmd token.
 func scanSysCmd(s *scanner) {
-	cobra.Tag("scan").Add("line", s.line).LogV("system command")
+	// cobra.Tag("scan").LogV("system command")
 	s.next()
 	s.emit(tokenLeftParenthesis)
 	for run := true; run; {
@@ -876,10 +890,18 @@ func scanSysCmd(s *scanner) {
 		case isAlphaNumeric(r) || r == '_' || r == '.' || r == '-' || r == '=':
 			s.next()
 		case r == ')':
+			cobra.Tag("scan").Strunc("name", s.input[s.start:s.pos]).Add("line", s.line).LogV("system command")
+
 			if s.pos > s.start {
 				s.emit(tokenSysCmd)
 			}
+
 			s.next()
+			pk := s.peek()
+			if pk == '}' {
+				return s.enterTextBlock(syscmd)
+			}
+
 			s.emit(tokenRightParenthesis)
 			run = false
 		case r == ',':
@@ -946,7 +968,7 @@ func (s *scanner) enterTextBlock(m cmdType) ƒ {
 	case short:
 		s.cmdDepth += 1
 		s.pushCmd(m)
-	case full:
+	case full, syscmd:
 		s.pushCmd(m)
 	default:
 		s.errorf("unknown command type when entering text block")
@@ -959,13 +981,15 @@ func (s *scanner) exitTextBlock() (f ƒ) {
 	switch m {
 	case short:
 		s.cmdDepth -= 1
-		if s.cmdDepth < 1 && !s.isParScanOn() {
+		if s.cmdDepth < 1 && s.isParScanAllowed() && s.isParScanOff() {
 			s.setParScanOn()
 		}
 		cobra.Tag("scan").Tag("scan").LogV("done scanning short command")
 		f = scanText
 	case full:
 		f = scanFullCmd
+	case syscmd:
+		f = scanText
 	default:
 		s.errorf("unknown command type when exiting text block")
 	}

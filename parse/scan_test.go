@@ -898,16 +898,16 @@ var parGenTestCases = []testParCase{
 		t.add(tkns(tokenEOF, ""))
 		return t.tokens
 	}()),
-	newParCase("use ¶+ to supress paragraph break", "¶-1\n\n¶+2\n¶+\n3", "", "", func() []token {
-		t := NewTC()
-		t.add(tkns(tokenText, "1\n\n"))
-		t.add(newParSeq("begin", ""))
-		t.add(tkns(tokenText, "2\n"))
-		t.add(tkns(tokenText, "\n3"))
-		t.add(newParSeq("end", ""))
-		t.add(tkns(tokenEOF, ""))
-		return t.tokens
-	}()),
+	// newParCase("use ¶+ to supress paragraph break", "¶-1\n\n¶+2\n¶+\n3", "", "", func() []token {
+	// 	t := NewTC()
+	// 	t.add(tkns(tokenText, "1\n\n"))
+	// 	t.add(newParSeq("begin", ""))
+	// 	t.add(tkns(tokenText, "2\n"))
+	// 	t.add(tkns(tokenText, "\n3"))
+	// 	t.add(newParSeq("end", ""))
+	// 	t.add(tkns(tokenEOF, ""))
+	// 	return t.tokens
+	// }()),
 	newParCase("consecutive ¶+", "¶-1\n\n¶+¶+¶+2\n\n3", "", "", func() []token {
 		t := NewTC()
 		t.add(tkns(tokenText, "1\n\n"))

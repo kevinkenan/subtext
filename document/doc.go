@@ -170,6 +170,9 @@ func (r *Render) renderNode(n parse.Node) string {
 		c := n.(*parse.Cmd)
 		cobra.Tag("render").WithField("argcount", len(c.ArgList)+len(c.ArgMap)).Add("name", c.NodeValue).LogV("rendering cmd node")
 		s.WriteString(r.processCmd(c))
+	case *parse.SysCmd:
+		c := n.(*parse.SysCmd)
+		cobra.Tag("render").Add("name", c.NodeValue).LogV("rendering syscmd node")
 	case *parse.ErrorNode:
 		cobra.Tag("render").LogV("rendering error node")
 		s.WriteString(n.(*parse.ErrorNode).GetErrorMsg())

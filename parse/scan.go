@@ -706,22 +706,23 @@ func scanCommentToggle(s *scanner) {
 }
 
 // scanCommand creates a cmd token.
-// Three types of command:
+// Types of command:
 //   * bare:   •cmd followed by non-alphanumeric char
 //   * short:  •cmd{text block}
 //   * full:   •cmd[context]
+// A system command has the same form, but the name is in parantheses: •(cmd)...
 func scanNewCommand(s *scanner) ƒ {
-	// input:   •cmd[...]
+	// input:  •cmd[...]
 	// s.pos:  ^
 	cobra.Tag("scan").Add("line", s.line).LogV("scanNewCommand")
 	cr := s.next()
 	s.ignore()
 	cmdMode := s.getCmdMode(cr)
-	cobra.Tag("scan").WithField("mode", cmdMode).LogV("command mode")
 
 	// Determine the command
 	switch r := s.peek(); {
 	case isAlphaNumeric(r):
+		cobra.Tag("scan").WithField("mode", cmdMode).LogV("macro command")
 		switch {
 		case s.isHorizCmd(cr):
 			// If we're not in a paragraph, this will start one for us.
@@ -749,9 +750,28 @@ func scanNewCommand(s *scanner) ƒ {
 
 		return scanText
 	case r == '(':
+		cobra.Tag("scan").LogV("system command")
+		s.next()
+		s.ignore()
+		s.setParScanOff()
 		s.emit(tokenSysCmdStart)
-		return scanSysCmd
-		// return scanText
+		scanName(s)
+
+		r = s.next()
+		if r != ')' {
+			return s.errorf("illegal character, %q, found in system command", r)
+		}
+		s.ignore()
+
+		switch s.peek() {
+		case '[':
+			return scanFullCmd
+		case '{':
+			return scanShortCmd
+		}
+
+		cobra.Tag("scan").LogV("done scanning bare system command")
+		return scanText
 	case r == '_': // space eater
 		cobra.Tag("scan").Add("line", s.line).LogV("eating spaces")
 		s.jumpNextRune()
@@ -771,7 +791,7 @@ func scanNewCommand(s *scanner) ƒ {
 
 func scanShortCmd(s *scanner) ƒ {
 	// input: •cmd{...}
-	// s.pos:       ^
+	// s.pos:     ^
 	for {
 		switch r := s.next(); {
 		case r == '{':
@@ -790,7 +810,7 @@ func scanShortCmd(s *scanner) ƒ {
 
 func scanFullCmd(s *scanner) ƒ {
 	// input: •cmd[...]
-	// s.pos:       ^
+	// s.pos:     ^
 	for {
 		switch r := s.next(); {
 		case r == '<':
@@ -867,7 +887,7 @@ func scanCmdFlags(s *scanner) {
 func scanName(s *scanner) {
 	for {
 		switch r := s.next(); {
-		case isAlphaNumeric(r) || r == '_' || r == '.' || r == '-':
+		case isAlphaNumeric(r) || r == '_' || r == '.' || r == '-' || r == '*':
 			continue
 		case s.isCommentToggle(r):
 			scanCommentToggle(s)
@@ -901,7 +921,22 @@ func scanSysCmd(s *scanner) ƒ {
 			s.next()
 			pk := s.peek()
 			if pk == '{' {
-				return ScanFullCmd
+				// input: •(cmd){...}
+				// s.pos:       ^
+				for {
+					switch r := s.next(); {
+					case r == '{':
+						s.emit(tokenLeftCurly)
+						return s.enterTextBlock(syscmd)
+					case r == '}':
+						s.emit(tokenRightCurly)
+						return s.exitTextBlock()
+					case isEndOfFile(r):
+						s.errorf("end of file while processing command")
+					default:
+						s.errorf("invalid character '%q' in command", r)
+					}
+				}
 			}
 
 			run = false
@@ -918,10 +953,8 @@ func scanSysCmd(s *scanner) ƒ {
 			s.eatSpaces()
 		case isEndOfFile(r):
 			s.errorf("end of file in sysCmd call")
-			return
 		default:
 			s.errorf("invalid character %q in sysCmd", r)
-			return
 		}
 	}
 	return scanText
@@ -969,7 +1002,7 @@ func (s *scanner) enterTextBlock(m cmdType) ƒ {
 	case short:
 		s.cmdDepth += 1
 		s.pushCmd(m)
-	case full, syscmd:
+	case full:
 		s.pushCmd(m)
 	default:
 		s.errorf("unknown command type when entering text block")
@@ -978,6 +1011,9 @@ func (s *scanner) enterTextBlock(m cmdType) ƒ {
 }
 
 func (s *scanner) exitTextBlock() (f ƒ) {
+	if s.peek() == '_' {
+		s.eatSpaces()
+	}
 	m := s.popCmd()
 	switch m {
 	case short:

@@ -8,8 +8,17 @@ import (
 	// "unicode"
 	// "unicode/utf8"
 	"github.com/kevinkenan/subtext/parse"
+	"gopkg.in/yaml.v2"
 	// "github.com/kevinkenan/cobra"
 )
+
+type MacroDef struct {
+	Name       string            // The macro's name to match command names
+	Template   string            // The Go template that defines the macro
+	Parameters []string          // Required parameters
+	Optionals  yaml.MapSlice  // Optional parameters in correct order
+	Delims [2]string           // Left and right delim used in the template
+}
 
 type Macro struct {
 	Name               string      // The macro's name to match command names
@@ -35,7 +44,12 @@ func NewMacro(name, tmplt string, params []string, optionals []*Optional) *Macro
 		TemplateText: tmplt,
 		Template:     t,
 		Ld:           "{{",
-		Rd:           "}}"}
+		Rd:           "}}",}
+}
+
+func (m *Macro) Parse() {
+	t := template.Must(template.New(m.Name).Delims(m.Ld, m.Rd).Option("missingkey=error").Parse(m.TemplateText))
+	m.Template = t
 }
 
 func NewOptional(name, dflt string) *Optional {

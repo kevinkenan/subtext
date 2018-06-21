@@ -8,6 +8,7 @@ import (
 	"github.com/kevinkenan/subtext/macros"
 	"github.com/kevinkenan/subtext/parse"
 	"github.com/kevinkenan/cobra"
+	"gopkg.in/yaml.v2"
 )
 
 // Document represents the text being processed.
@@ -37,6 +38,7 @@ type Render struct {
 	*Document
 	ParagraphMode bool
 	InParagraph   bool // true indicates that execution is in a paragraph.
+	ParBuffer     *parse.Cmd //
 	depth         int  // tracks recursion depth
 	skipNodeCount int  // skip the next nodes
 
@@ -139,6 +141,7 @@ func (r *Render) render(root *parse.Section) string {
 func (r *Render) renderSection(n *parse.Section) string {
 	s := new(strings.Builder)
 	for _, l := range n.NodeList {
+		cobra.Tag("render").LogV("next node in section")
 		s.WriteString(r.renderNode(l))
 	}
 	return s.String()
@@ -160,22 +163,43 @@ func (r *Render) renderNode(n parse.Node) string {
 	case *parse.Section:
 		cobra.Tag("render").LogV("rendering section node")
 		s.WriteString(r.renderSection(n.(*parse.Section)))
+	
 	case *parse.Text:
+		if r.ParBuffer != nil {
+			cobra.Tag("render").LogV("processing paragraph buffer in text")
+			par := r.ParBuffer
+			r.ParBuffer = nil
+			s.WriteString(r.processCmd(par))
+		}
+
 		cobra.Tag("render").LogV("rendering text node")
+
 		if r.ParagraphMode && !r.InParagraph {
 			r.InParagraph = true
 		}
+
 		s.WriteString(n.(*parse.Text).GetText())
+
 	case *parse.Cmd:
 		c := n.(*parse.Cmd)
 		cobra.Tag("render").WithField("argcount", len(c.ArgList)+len(c.ArgMap)).Add("name", c.NodeValue).LogV("rendering cmd node")
-		s.WriteString(r.processCmd(c))
-	case *parse.SysCmd:
-		c := n.(*parse.SysCmd)
-		cobra.Tag("render").Add("name", c.NodeValue).LogV("rendering syscmd node")
+
+		if c.SysCmd {
+			s.WriteString(r.processSysCmd(c))
+		} else {
+			s.WriteString(r.processCmd(c))
+		}
+
+		// s.WriteString(sc)
+
+	// case *parse.SysCmd:
+	// 	c := n.(*parse.SysCmd)
+	// 	cobra.Tag("render").Add("name", c.NodeValue).LogV("rendering syscmd node")
+
 	case *parse.ErrorNode:
 		cobra.Tag("render").LogV("rendering error node")
 		s.WriteString(n.(*parse.ErrorNode).GetErrorMsg())
+
 	default:
 		panic(RenderError{message: fmt.Sprintf("unexpected node %q\n", n)})
 	}
@@ -194,15 +218,102 @@ func (r *Render) renderNodeList(n parse.NodeList) string {
 	return s.String()
 }
 
-func isFollowedByParEnd(n *parse.Cmd) bool {
-	peek := n.Ahead().Ahead()
-	if c, ok := peek.(*parse.Cmd); ok {
-		cn := c.GetCmdName()
-		if cn == "sys.paragraph.end" {
-			return true
+// func (r *Render) isFollowedByParEnd(n *parse.Cmd) int {
+// 	peek := n.Ahead().Ahead()
+// 	skip := 1
+
+// 	for {
+// 		if c, ok := peek.(*parse.Cmd); ok {
+// 			cn := c.GetCmdName()
+// 			cobra.Tag("render").Add("cmdname", cn).LogV("empty check: peek")
+// 			switch cn {
+// 			case "sys.paragraph.end":
+// 				cobra.Tag("render").LogV("empty check: paragraph.end")
+// 				return skip
+// 			case "sys.newmacro":
+// 				r.processSysCmd(peek.(*parse.Cmd))
+// 				peek = peek.Ahead().Ahead()
+// 				cobra.Tag("render").Add("ahead", peek).LogV("empty check: syscmd")
+// 				skip += 1
+// 				continue
+// 			default:
+// 				cobra.Tag("render").Add("cmd", cn).LogV("empty check: another command")
+// 				return 0
+// 			}
+			
+// 			// if cn == "sys.paragraph.end" {
+// 			// 	return true
+// 			// }
+// 		}
+// 		cobra.Tag("render").LogV("empty check: a non-cmd node")
+// 		return 0
+// 	}
+// }
+
+func (r *Render) processSysCmd(n *parse.Cmd) string {
+	// name := fmt.Sprintf("sys.%s", n.GetCmdName())
+	name := n.GetCmdName()
+	flowStyle := false
+	cobra.Tag("render").WithField("cmd", name).LogV("processing system command (cmd)")
+	switch name {
+	case "sys.newmacro*":
+		flowStyle = true
+		name = "sys.newmacro"
+		fallthrough
+	case "sys.newmacro":
+		// Retrieve the sys.newmacro system command
+		d, found := r.macros[name]
+		if !found {
+			panic(RenderError{message: fmt.Sprintf("Line %d: system command %q not defined.", n.GetLineNum(), name)})
 		}
+		cobra.Tag("cmd").Strunc("macro", d.TemplateText).LogfV("retrieved system command definition")
+
+		args, err := d.ValidateArgs(n)
+		if err != nil {
+			panic(RenderError{message: fmt.Sprintf("Line %d: ValidateArgs failed on system command %q: %q", n.GetLineNum(), name, err)})
+		}
+
+		cobra.Tag("cmd").Strunc("syscmd", args["def"].String()).LogfV("system command: %s", args["def"])
+		var mdef macros.MacroDef
+		if flowStyle {
+			err = yaml.Unmarshal([]byte("{"+args["def"].String()+"}"), &mdef)
+		} else {
+			err = yaml.Unmarshal([]byte(args["def"].String()), &mdef)
+		}
+		if err != nil {
+			panic(RenderError{message: fmt.Sprintf("Line %d: unmarshall error for system command %q: %q", n.GetLineNum(), name, err)})
+		}
+		cobra.Tag("cmd").LogfV("marshalled syscmd: %+v", mdef)
+
+		opts := []*macros.Optional{}
+		for _, opt := range mdef.Optionals {
+			opts = append(opts, macros.NewOptional(opt.Key.(string), opt.Value.(string)))
+		}
+
+		left, right := mdef.Delims[0], mdef.Delims[1]
+
+		if left == "" {
+			left = "(("
+		}
+
+		if right == "" {
+			right = "))"
+		}
+
+		m := &macros.Macro{
+			Name: mdef.Name, 
+			TemplateText: mdef.Template, 
+			Parameters: mdef.Parameters, 
+			Optionals: opts,
+			Ld:        left,
+			Rd:        right,
+		}
+
+		m.Parse()
+		r.macros[m.Name] = m
+		cobra.Tag("cmd").LogfV("loaded new macro")
 	}
-	return false
+	return ""
 }
 
 func (r *Render) processCmd(n *parse.Cmd) string {
@@ -216,13 +327,22 @@ func (r *Render) processCmd(n *parse.Cmd) string {
 	// paragraph handling is triggered.
 	if r.ParagraphMode {
 		switch {
-		case name == "sys.paragraph.begin" && isFollowedByParEnd(n):
-			cobra.Tag("render").LogfV("empty paragraph so skipping nodes")
-			r.skipNodeCount += 1
-			return ""
 		case name == "sys.paragraph.begin":
-			name = "paragraph.begin"
+			n.NodeValue = parse.NodeValue("paragraph.begin")
+			r.ParBuffer = n
+			// skip := r.isFollowedByParEnd(n)
+			// if skip > 0 {
+			// 	cobra.Tag("render").LogfV("empty paragraph so skipping nodes")
+			// 	r.skipNodeCount += skip
+			// 	return ""
+			// }
+			return ""
 		case name == "sys.paragraph.end":
+			if r.ParBuffer != nil {
+				r.ParBuffer = nil
+				cobra.Tag("render").LogfV("empty paragraph so skipping nodes")
+				return ""
+			}
 			name = "paragraph.end"
 		}
 	}
@@ -249,7 +369,7 @@ func (r *Render) processCmd(n *parse.Cmd) string {
 	renArgs := map[string]string{}
 	for k, v := range args {
 		renArgs[k] = v.String()
-		cmdLog.Copy().Strunc("arg", k).LogV("prepared command argument")
+		cmdLog.Copy().Strunc("arg", k).Strunc("val", v).LogV("prepared command argument")
 	}
 
 	// Apply the command's arguments to the macro.
@@ -258,7 +378,7 @@ func (r *Render) processCmd(n *parse.Cmd) string {
 		// fmt.Println(err)
 		panic(RenderError{fmt.Sprintf("error rendering macro %q: %s", name, err)})
 	}
-	cmdLog.Copy().Add("name", name).Logf("executed macro, ready for parsing")
+	cmdLog.Copy().Add("name", name).Add("ld", m.Ld).Logf("executed macro, ready for parsing")
 	
 	// Handle commands embedded in the macro.
 	output, err := parse.ParsePlain(name, s)

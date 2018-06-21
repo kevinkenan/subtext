@@ -131,11 +131,16 @@ Loop:
 			p.root.append(n)
 			p.link(n)
 		case tokenSysCmdStart:
-			ns := p.makeSysCmd()
-			for _, n := range ns {
-				p.root.append(n)
-				p.link(n)
-			}
+			// ns := p.makeSysCmd(t)
+			n := p.makeCmd(t)
+			n.SysCmd = true
+			n.NodeValue = NodeValue(fmt.Sprintf("sys.%s", n.NodeValue))
+			p.root.append(n)
+			p.link(n)
+			// for _, n := range ns {
+			// 	p.root.append(n)
+			// 	p.link(n)
+			// }
 		// case tokenParagraphStart:
 		// 	p.root.append(NewParagraphStart(t.value))
 		// case tokenParagraphEnd:
@@ -157,26 +162,26 @@ func (p *parser) makeTextNode(t *token) (n *Text) {
 	return
 }
 
-func (p *parser) makeSysCmd() []*SysCmd {
-	nodes := []*SysCmd{}
-	p.nextIf(tokenLeftParenthesis)
-	for run := true; run; {
-		t := p.next()
-		switch t.typeof {
-		case tokenSysCmd:
-			cobra.Tag("parse").WithField("val", t.value).LogV("creating a syscmd node")
-			n := NewSysCmdNode(t.value)
-			nodes = append(nodes, n)
-			p.link(n)
-		case tokenRightParenthesis:
-			run = false
-		case tokenComma:
-		default:
-			p.errorf("Line %d: unexpected token %q in SysCmd with value %q", t.lnum, tokenTypeLookup(t.typeof), t.value)
-		}
-	}
-	return nodes
-}
+// func (p *parser) makeSysCmd(t *token) []*SysCmd {
+// 	nodes := []*SysCmd{}
+// 	p.nextIf(tokenLeftParenthesis)
+// 	for run := true; run; {
+// 		t := p.next()
+// 		switch t.typeof {
+// 		case tokenSysCmd:
+// 			cobra.Tag("parse").WithField("val", t.value).LogV("creating a syscmd node")
+// 			n := NewSysCmdNode(t.value)
+// 			nodes = append(nodes, n)
+// 			p.link(n)
+// 		case tokenRightParenthesis:
+// 			run = false
+// 		case tokenComma:
+// 		default:
+// 			p.errorf("Line %d: unexpected token %q in SysCmd with value %q", t.lnum, tokenTypeLookup(t.typeof), t.value)
+// 		}
+// 	}
+// 	return nodes
+// }
 
 func (p *parser) makeCmd(t *token) (n *Cmd) {
 	// p.cmdDepth += 1
@@ -197,6 +202,12 @@ func (p *parser) makeCmd(t *token) (n *Cmd) {
 
 func (p *parser) parseSimpleCmd(m *Cmd) {
 	cobra.Tag("parse").LogV("parsing a simple cmd")
+	m.ArgList = []NodeList{p.parseTextBlock(m)}
+	return
+}
+
+func (p *parser) parseSysCmd(m *Cmd) {
+	cobra.Tag("parse").LogV("parsing syscmd")
 	m.ArgList = []NodeList{p.parseTextBlock(m)}
 	return
 }
@@ -281,20 +292,11 @@ func (p *parser) parseTextBlock(m *Cmd) (nl NodeList) {
 			nl = append(nl, n)
 			p.link(n)
 		case tokenSysCmd:
-			ns := p.makeSysCmd()
-			cobra.Tag("parse").LogV("adding sysCmd nodes to root -- root seems like an odd place to add these nodes")
-			for _, n := range ns {
-				p.root.append(n) // TODO: is this right?
-				p.link(n)
-			}
-		// case tokenParagraphStart:
-		// 	n := NewParagraphStart(t.value)
-		// 	cobra.Tag("parse").LogV("adding paragraphStart to NodeList")
-		// 	nl = append(nl, n)
-		// case tokenParagraphEnd:
-		// 	n := NewParagraphEnd(t.value)
-		// 	cobra.Tag("parse").LogV("adding paragraphEnd to NodeList")
-		// 	nl = append(nl, n)
+			n := p.makeCmd(t)
+			n.SysCmd = true
+			cobra.Tag("parse").LogV("adding sysCmdStart to NodeList")
+			nl = append(nl, n)
+			p.link(n)
 		case tokenCmdStart:
 			n := p.makeCmd(t)
 			cobra.Tag("parse").LogV("adding cmdStart to NodeList")

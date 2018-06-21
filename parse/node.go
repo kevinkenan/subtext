@@ -297,12 +297,16 @@ func (t *Text) GetText() string {
 type SysCmd struct {
 	NodeType
 	NodeValue
+	Arguments
 	Peek
 }
 
-func NewSysCmdNode(t string) *SysCmd {
+func NewSysCmdNode(name, t string) *SysCmd {
 	cobra.Tag("node").LogV("syscmd")
-	return &SysCmd{NodeType: nSysCmd, NodeValue: NodeValue(t)}
+	return &SysCmd{
+		NodeType: nSysCmd, 
+		NodeValue: NodeValue(name),
+		Arguments: Arguments{true, []NodeList{}, nil},}
 }
 
 func (t *SysCmd) Details() string {
@@ -352,6 +356,7 @@ type Cmd struct {
 	Flags    []string
 	cmdToken *token
 	Peek
+	SysCmd  bool // true if the command is a system command.
 }
 
 type Arguments struct {

@@ -756,6 +756,12 @@ func scanNewCommand(s *scanner) ƒ {
 			return scanShortCmd
 		}
 
+		if s.peek() == '%' {
+			s.next()
+			s.ignore()
+			s.eatSpaces()
+		}
+
 		cobra.Tag("scan").LogV("done scanning bare command")
 		if s.cmdDepth < 1 && s.isParScanAllowed() && s.isParScanOff() {
 			s.setParScanOn()
@@ -781,6 +787,12 @@ func scanNewCommand(s *scanner) ƒ {
 			return scanFullCmd
 		case '{':
 			return scanShortCmd
+		}
+
+		if s.peek() == '%' {
+			s.next()
+			s.ignore()
+			s.eatSpaces()
 		}
 
 		cobra.Tag("scan").LogV("done scanning bare system command")

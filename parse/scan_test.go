@@ -60,16 +60,37 @@ var commonTestCases = []testCase{
 		token{tokenEOF, 7, 2, ""}}),
 
 	// Space Eater Tests
-	newLocCase("basic space eater", "•_ 1•_           \t2", []token{
+	newLocCase("basic space eater", "•% 1•%           \t2", []token{
 		token{tokenText, 5, 1, "1"},
 		token{tokenText, 22, 1, "2"},
 		token{tokenEOF, 23, 1, ""}}),
-	newLocCase("double space eater", "•_ •_ 1", []token{
+	newLocCase("double space eater", "•% •% 1", []token{
 		token{tokenText, 10, 1, "1"},
 		token{tokenEOF, 11, 1, ""}}),
-	newLocCase("multiline space eater", "•_ \n\n 1", []token{
+	newLocCase("multiline space eater", "•% \n\n 1", []token{
 		token{tokenText, 8, 3, "1"},
 		token{tokenEOF, 9, 3, ""}}),
+	newCase("end of bare macro space eater", "•a% \n\n 1", []token{
+		tkn(tokenCmdStart, "H"),
+		tkn(tokenName, "a"),
+		tkn(tokenText, "1"),
+		tEOF}),
+	newCase("end of short macro space eater", "•a{}% \n\n 1", []token{
+		tkn(tokenCmdStart, "H"),
+		tkn(tokenName, "a"),
+        tkn(tokenLeftCurly, "{"),
+        tkn(tokenRightCurly, "}"),
+		tkn(tokenText, "1"),
+		tEOF}),
+	newCase("end of extended macro space eater", "•a[{}]% \n\n 1", []token{
+		tkn(tokenCmdStart, "H"),
+		tkn(tokenName, "a"),
+		tkn(tokenLeftSquare, "["),
+        tkn(tokenLeftCurly, "{"),
+        tkn(tokenRightCurly, "}"),
+        tkn(tokenRightSquare, "]"),
+		tkn(tokenText, "1"),
+		tEOF}),
 
 	// Cmd Tests
 	newCase("basic command", "1•cmd 2", []token{

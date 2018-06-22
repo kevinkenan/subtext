@@ -427,12 +427,10 @@ var commonTestCases = []testCase{
 		tEOF}),
 
 	// sysCmd Tests
-	newCase("system commands", "1•(a)2", []token{
+	newCase("bare system commands", "1•(a)2", []token{
 		tkn(tokenText, "1"),
 		tkn(tokenSysCmdStart, ""),
-		tkn(tokenLeftParenthesis, "("),
-		tkn(tokenSysCmd, "a"),
-		tkn(tokenRightParenthesis, ")"),
+		tkn(tokenName, "a"),
 		tkn(tokenText, "2"),
 		tEOF}),
 	newCase("system commands", "1•(a=b c=d)2", []token{

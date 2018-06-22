@@ -256,7 +256,7 @@ func (r *Render) processSysCmd(n *parse.Cmd) string {
 	flowStyle := false
 	cobra.Tag("render").WithField("cmd", name).LogV("processing system command (cmd)")
 	switch name {
-	case "sys.newmacro*":
+	case "sys.newmacrof":
 		flowStyle = true
 		name = "sys.newmacro"
 		fallthrough

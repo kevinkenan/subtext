@@ -162,27 +162,6 @@ func (p *parser) makeTextNode(t *token) (n *Text) {
 	return
 }
 
-// func (p *parser) makeSysCmd(t *token) []*SysCmd {
-// 	nodes := []*SysCmd{}
-// 	p.nextIf(tokenLeftParenthesis)
-// 	for run := true; run; {
-// 		t := p.next()
-// 		switch t.typeof {
-// 		case tokenSysCmd:
-// 			cobra.Tag("parse").WithField("val", t.value).LogV("creating a syscmd node")
-// 			n := NewSysCmdNode(t.value)
-// 			nodes = append(nodes, n)
-// 			p.link(n)
-// 		case tokenRightParenthesis:
-// 			run = false
-// 		case tokenComma:
-// 		default:
-// 			p.errorf("Line %d: unexpected token %q in SysCmd with value %q", t.lnum, tokenTypeLookup(t.typeof), t.value)
-// 		}
-// 	}
-// 	return nodes
-// }
-
 func (p *parser) makeCmd(t *token) (n *Cmd) {
 	// p.cmdDepth += 1
 	cobra.Tag("parse").LogV("creating a cmd node")

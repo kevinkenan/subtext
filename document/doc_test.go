@@ -5,13 +5,13 @@ import (
 	"github.com/kevinkenan/subtext/macros"
 	// "github.com/kevinkenan/subtext/verbose"
 	// "strings"
-	"testing"
 	"github.com/kevinkenan/cobra"
+	"testing"
 )
 
 func init() {
 	cfg := cobra.NewTestingConfig(nil)
-	cfg.LogPanicOnly() 
+	cfg.LogPanicOnly()
 	// cfg := cobra.NewTestingConfig([]string{"macro","parse","node","scan"})
 	_ = cfg
 	// cfg.SetDefault("logalltags", true)

@@ -12,7 +12,7 @@ import (
 
 func init() {
 	cfg := cobra.NewTestingConfig(nil)
-	cfg.LogPanicOnly() 
+	cfg.LogPanicOnly()
 	// cfg := cobra.NewTestingConfig([]string{"macro","parse","node","scan"})
 	_ = cfg
 	// cfg.SetDefault("logalltags", true)
@@ -23,7 +23,7 @@ func stopFmtUnusedError() {
 }
 
 // ValidateArguments ----------------------------------------------------------
-// The initial opening paragraph command is skipped in these tests. 
+// The initial opening paragraph command is skipped in these tests.
 
 func TestValidateArgs(t *testing.T) {
 	var m *Macro

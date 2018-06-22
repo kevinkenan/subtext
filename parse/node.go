@@ -304,9 +304,9 @@ type SysCmd struct {
 func NewSysCmdNode(name, t string) *SysCmd {
 	cobra.Tag("node").LogV("syscmd")
 	return &SysCmd{
-		NodeType: nSysCmd, 
+		NodeType:  nSysCmd,
 		NodeValue: NodeValue(name),
-		Arguments: Arguments{true, []NodeList{}, nil},}
+		Arguments: Arguments{true, []NodeList{}, nil}}
 }
 
 func (t *SysCmd) Details() string {
@@ -356,7 +356,7 @@ type Cmd struct {
 	Flags    []string
 	cmdToken *token
 	Peek
-	SysCmd  bool // true if the command is a system command.
+	SysCmd bool // true if the command is a system command.
 }
 
 type Arguments struct {

@@ -5,9 +5,9 @@ import (
 	// "os"
 	"strings"
 	// "text/template"
+	"github.com/kevinkenan/cobra"
 	"github.com/kevinkenan/subtext/macros"
 	"github.com/kevinkenan/subtext/parse"
-	"github.com/kevinkenan/cobra"
 	"gopkg.in/yaml.v2"
 )
 
@@ -21,7 +21,7 @@ type Document struct {
 	Text     string
 	Root     *parse.Section
 	macros   map[string]*macros.Macro
-	Plain   bool // Don't generate paragraphs or aggressively eat whitespace
+	Plain    bool // Don't generate paragraphs or aggressively eat whitespace
 }
 
 type RenderError struct {
@@ -37,10 +37,10 @@ func (r RenderError) Error() string {
 type Render struct {
 	*Document
 	ParagraphMode bool
-	InParagraph   bool // true indicates that execution is in a paragraph.
+	InParagraph   bool       // true indicates that execution is in a paragraph.
 	ParBuffer     *parse.Cmd //
-	depth         int  // tracks recursion depth
-	skipNodeCount int  // skip the next nodes
+	depth         int        // tracks recursion depth
+	skipNodeCount int        // skip the next nodes
 
 }
 
@@ -103,7 +103,7 @@ func (d *Document) Make() (s string, err error) {
 // MakeWith), but MakeWith itself is useful for handling macros embedded in
 // templates.
 func MakeWith(t string, r *Render) (s string, err error) {
-	defer func() {cobra.LogV("finished rendering")}()
+	defer func() { cobra.LogV("finished rendering") }()
 	defer func() {
 		if e := recover(); e != nil {
 			switch e.(type) {
@@ -163,7 +163,7 @@ func (r *Render) renderNode(n parse.Node) string {
 	case *parse.Section:
 		cobra.Tag("render").LogV("rendering section node")
 		s.WriteString(r.renderSection(n.(*parse.Section)))
-	
+
 	case *parse.Text:
 		if r.ParBuffer != nil {
 			cobra.Tag("render").LogV("processing paragraph buffer in text")
@@ -218,38 +218,6 @@ func (r *Render) renderNodeList(n parse.NodeList) string {
 	return s.String()
 }
 
-// func (r *Render) isFollowedByParEnd(n *parse.Cmd) int {
-// 	peek := n.Ahead().Ahead()
-// 	skip := 1
-
-// 	for {
-// 		if c, ok := peek.(*parse.Cmd); ok {
-// 			cn := c.GetCmdName()
-// 			cobra.Tag("render").Add("cmdname", cn).LogV("empty check: peek")
-// 			switch cn {
-// 			case "sys.paragraph.end":
-// 				cobra.Tag("render").LogV("empty check: paragraph.end")
-// 				return skip
-// 			case "sys.newmacro":
-// 				r.processSysCmd(peek.(*parse.Cmd))
-// 				peek = peek.Ahead().Ahead()
-// 				cobra.Tag("render").Add("ahead", peek).LogV("empty check: syscmd")
-// 				skip += 1
-// 				continue
-// 			default:
-// 				cobra.Tag("render").Add("cmd", cn).LogV("empty check: another command")
-// 				return 0
-// 			}
-			
-// 			// if cn == "sys.paragraph.end" {
-// 			// 	return true
-// 			// }
-// 		}
-// 		cobra.Tag("render").LogV("empty check: a non-cmd node")
-// 		return 0
-// 	}
-// }
-
 func (r *Render) processSysCmd(n *parse.Cmd) string {
 	// name := fmt.Sprintf("sys.%s", n.GetCmdName())
 	name := n.GetCmdName()
@@ -301,12 +269,12 @@ func (r *Render) processSysCmd(n *parse.Cmd) string {
 		}
 
 		m := &macros.Macro{
-			Name: mdef.Name, 
-			TemplateText: mdef.Template, 
-			Parameters: mdef.Parameters, 
-			Optionals: opts,
-			Ld:        left,
-			Rd:        right,
+			Name:         mdef.Name,
+			TemplateText: mdef.Template,
+			Parameters:   mdef.Parameters,
+			Optionals:    opts,
+			Ld:           left,
+			Rd:           right,
 		}
 
 		m.Parse()
@@ -379,7 +347,7 @@ func (r *Render) processCmd(n *parse.Cmd) string {
 		panic(RenderError{fmt.Sprintf("error rendering macro %q: %s", name, err)})
 	}
 	cmdLog.Copy().Add("name", name).Add("ld", m.Ld).Logf("executed macro, ready for parsing")
-	
+
 	// Handle commands embedded in the macro.
 	output, err := parse.ParsePlain(name, s)
 	if err != nil {

@@ -147,10 +147,10 @@ func NewScanner(name, input string) *scanner {
 type cmdType int
 
 const (
-	short cmdType = iota // short command
-	shortAlt             // short command with alt terminator
-	full                 // full command
-	fullAlt              // full command with alt terminator
+	short    cmdType = iota // short command
+	shortAlt                // short command with alt terminator
+	full                    // full command
+	fullAlt                 // full command with alt terminator
 	syscmd
 )
 
@@ -926,8 +926,7 @@ func scanName(s *scanner) bool {
 			if strings.HasSuffix(name, "*") {
 				cobra.Tag("scan").LogV("cmd specifies alt terminator")
 				alt = true
-				name = strings.TrimSuffix(name,"*")
-				
+				name = strings.TrimSuffix(name, "*")
 			}
 			s.emitInsertedToken(tokenName, name)
 			return alt

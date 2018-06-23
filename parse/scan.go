@@ -736,6 +736,7 @@ func scanNewCommand(s *scanner) ƒ {
 	switch r := s.peek(); {
 	case isAlphaNumeric(r):
 		cobra.Tag("scan").WithField("mode", cmdMode).LogV("macro command")
+
 		switch {
 		case s.isHorizCmd(cr):
 			// If we're not in a paragraph, this will start one for us.
@@ -935,11 +936,13 @@ func scanName(s *scanner) bool {
 			name := s.input[s.start:s.pos]
 			s.ignore()
 			cobra.Tag("scan").Add("line", s.line).WithField("name", name).LogfV("scanName")
+
 			if strings.HasSuffix(name, "*") {
 				cobra.Tag("scan").LogV("cmd specifies alt terminator")
 				alt = true
 				name = strings.TrimSuffix(name, "*")
 			}
+
 			s.emitInsertedToken(tokenName, name)
 			return alt
 		}
@@ -990,12 +993,14 @@ func scanSysCmd(s *scanner) ƒ {
 			if s.pos > s.start {
 				s.emit(tokenSysCmd)
 			}
+
 			s.next()
 			s.emit(tokenComma)
 		case isSpace(r), isEndOfLine(r):
 			if s.pos > s.start {
 				s.emit(tokenSysCmd)
 			}
+
 			s.eatSpaces()
 		case isEndOfFile(r):
 			s.errorf("end of file in sysCmd call")

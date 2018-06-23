@@ -163,12 +163,12 @@ var parseTestCases = []parseTestCase{
 	{"two named args on different lines", "1 •2[x={a}\ny={b}]3", "1 •2[<>x={a}y={b}]3", 6, false, false},
 	{"complex context with named args", "1 •2[1={a}2={b •x{c}}] 4", "1 •2[<>1={a}2={b •x[<>{c}]}] 4", 8, false, false},
 	{"line breaks", "\n\n1\n\n2\n\n3\n", "\n\n1\n\n2\n\n3\n", 3, false, false},
-	{"line breaks with parscan flag", "¶+\n\n1\n\n2\n\n3\n", "\n\n1\n\n2\n\n3\n", 3, false, false},
+	{"line breaks with parscan flag on", "¶+\n\n1\n\n2\n\n3\n", "•sys.paragraph.begin[<>{}]1•sys.paragraph.end[<>{\n\n}]•sys.paragraph.begin[<>{}]2•sys.paragraph.end[<>{\n\n}]•sys.paragraph.begin[<>{}]3•sys.paragraph.end[<>{\n}]", 16, false, false},
 
 	// SysCmd tests
-	{"SysCmd", "test•(this)now", "test•(this)now", 4, false, false},
-	{"SysCmd advanced", "test•(this=that what)now", "test•(this=that)•(what)now", 5, false, false},
-	{"SysCmd with linebreak", "test•(this\nthat)now", "test•(this)•(that)now", 5, false, false},
+	{"SysCmd", "test•(this)now", "test•sys.this[<>{}]now", 4, false, false},
+	{"SysCmd advanced", "test•(this){that}now", "test•sys.this[<>{that}]now", 5, false, false},
+	{"SysCmd with linebreak", "test•(this){\nthat}now", "test•sys.this[<>{\nthat}]now", 5, false, false},
 
 	// Error tests
 	{"basic kv command", "1•", "", 0, true, false},

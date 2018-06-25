@@ -564,6 +564,9 @@ func (s *scanner) sendInitialParagraph() (sent bool) {
 
 func scanText(s *scanner) ƒ {
 	cobra.Tag("scan").LogV("scanText")
+	if s.isParScanOn() && !s.isInsidePar() {
+		s.eatSpaces()
+	}
 Loop:
 	for {
 		switch r := s.next(); {

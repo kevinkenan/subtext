@@ -41,6 +41,7 @@ type Render struct {
 	ParBuffer     *parse.Cmd //
 	depth         int        // tracks recursion depth
 	skipNodeCount int        // skip the next nodes
+	init          bool       // true if in init mode (no output is written)
 
 }
 
@@ -154,7 +155,7 @@ func (r *Render) renderNode(n parse.Node) string {
 		return ""
 	}
 	r.depth += 1
-	if r.depth > 5 {
+	if r.depth > 10 {
 		panic(RenderError{message: "exceeded call depth"})
 	}
 	s := new(strings.Builder)
@@ -165,6 +166,11 @@ func (r *Render) renderNode(n parse.Node) string {
 		s.WriteString(r.renderSection(n.(*parse.Section)))
 
 	case *parse.Text:
+		if r.init {
+			cobra.Tag("render").LogV("init mode so skipping text render")
+			return ""
+		}
+
 		if r.ParBuffer != nil {
 			cobra.Tag("render").LogV("processing paragraph buffer in text")
 			par := r.ParBuffer
@@ -172,7 +178,7 @@ func (r *Render) renderNode(n parse.Node) string {
 			s.WriteString(r.processCmd(par))
 		}
 
-		cobra.Tag("render").LogV("rendering text node")
+		cobra.Tag("render").LogV("rendering text")
 
 		if r.ParagraphMode && !r.InParagraph {
 			r.InParagraph = true
@@ -224,6 +230,10 @@ func (r *Render) processSysCmd(n *parse.Cmd) string {
 	flowStyle := false
 	cobra.Tag("render").WithField("cmd", name).LogV("processing system command (cmd)")
 	switch name {
+	case "sys.init.begin":
+		r.init = true
+	case "sys.init.end":
+		r.init = false
 	case "sys.newmacrof":
 		flowStyle = true
 		name = "sys.newmacro"

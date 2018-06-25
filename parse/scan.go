@@ -114,10 +114,11 @@ type scanner struct {
 	tokens        chan token // channel of scanned tokens
 	cmdDepth      int        // nesting depth of commands
 	altTerm       bool       // true if '*}' terminates a text block
+	init          bool       // true if in init mode
 	line          int        // number of newlines seen (starts at 1)
 	// cmdStack indicates if a command's text block was called from within a
 	// full command (with a context) or from a short command.
-	cmdStack           []cmdType
+	cmdStack           []*cmdAttrs
 	parMode            bool // true when the scanner is invoked with scan instead of scanPlain
 	diableParScanFlags bool // when true, the scanner ignores ¶ commands
 	allowParScan       bool // When false, the scanner is not allowed to insert paragraphs
@@ -142,6 +143,12 @@ func NewScanner(name, input string) *scanner {
 		parScanFlag:   true,
 		parOpen:       false,
 	}
+}
+
+type cmdAttrs struct {
+	extended bool // true if the command includes the full body
+	altTerm bool // true if '*}' terminates a text block
+	init bool     // true if in init mode
 }
 
 type cmdType int
@@ -256,11 +263,11 @@ func (s *scanner) setInsidePar(b bool) bool {
 }
 
 // pushCmdTextExit is called when you enter a text block
-func (s *scanner) pushCmd(m cmdType) {
+func (s *scanner) pushCmd(m *cmdAttrs) {
 	s.cmdStack = append(s.cmdStack, m)
 }
 
-func (s *scanner) popCmd() (m cmdType) {
+func (s *scanner) popCmd() (m *cmdAttrs) {
 	l := len(s.cmdStack)
 	if l == 0 {
 		s.errorf("attempted to read past the end of the command stack")
@@ -748,7 +755,7 @@ func scanNewCommand(s *scanner) ƒ {
 
 		s.setParScanOff()
 		s.emitInsertedToken(tokenCmdStart, cmdMode)
-		s.altTerm = scanName(s)
+		scanName(s)
 
 		switch s.peek() {
 		case '[':
@@ -775,7 +782,17 @@ func scanNewCommand(s *scanner) ƒ {
 		s.ignore()
 		s.setParScanOff()
 		s.emit(tokenSysCmdStart)
-		s.altTerm = scanName(s)
+		cmdName := scanName(s)
+
+		if cmdName == "init.begin" {
+			s.init = true
+			s.setParScanOff()
+		}
+
+		if cmdName == "init.end" {
+			s.init = false
+			s.setParScanOn()
+		}
 
 		r = s.next()
 		if r != ')' {
@@ -853,7 +870,7 @@ func scanFullCmd(s *scanner) ƒ {
 		case r == '>':
 			s.emit(tokenRightAngle)
 		case isAlphaNumeric(r):
-			s.altTerm = scanName(s)
+			scanName(s)
 		case r == '=':
 			cobra.Tag("scan").LogV("scan cmd arg name")
 			s.emit(tokenEqual)
@@ -923,7 +940,7 @@ func scanCmdFlags(s *scanner) {
 }
 
 // scanName creates a name token.
-func scanName(s *scanner) bool {
+func scanName(s *scanner) string {
 	for {
 		switch r := s.next(); {
 		case isAlphaNumeric(r) || r == '_' || r == '.' || r == '-' || r == '*':
@@ -944,72 +961,73 @@ func scanName(s *scanner) bool {
 			}
 
 			s.emitInsertedToken(tokenName, name)
-			return alt
+			s.altTerm = alt
+			return name
 		}
 	}
 }
 
-// scanSysCmd creates a  sysCmd token.
-func scanSysCmd(s *scanner) ƒ {
-	// cobra.Tag("scan").LogV("system command")
-	s.next()
-	s.emit(tokenLeftParenthesis)
-	for run := true; run; {
-		switch r := s.peek(); {
-		case isAlphaNumeric(r) || r == '_' || r == '.' || r == '-' || r == '=':
-			s.next()
-		case r == ')':
-			cobra.Tag("scan").Strunc("name", s.input[s.start:s.pos]).Add("line", s.line).LogV("system command")
+// // scanSysCmd creates a  sysCmd token.
+// func scanSysCmd(s *scanner) ƒ {
+// 	// cobra.Tag("scan").LogV("system command")
+// 	s.next()
+// 	s.emit(tokenLeftParenthesis)
+// 	for run := true; run; {
+// 		switch r := s.peek(); {
+// 		case isAlphaNumeric(r) || r == '_' || r == '.' || r == '-' || r == '=':
+// 			s.next()
+// 		case r == ')':
+// 			cobra.Tag("scan").Strunc("name", s.input[s.start:s.pos]).Add("line", s.line).LogV("system command")
 
-			if s.pos > s.start {
-				s.emit(tokenSysCmd)
-			}
+// 			if s.pos > s.start {
+// 				s.emit(tokenSysCmd)
+// 			}
 
-			s.emit(tokenRightParenthesis)
+// 			s.emit(tokenRightParenthesis)
 
-			s.next()
-			pk := s.peek()
-			if pk == '{' {
-				// input: •(cmd){...}
-				// s.pos:       ^
-				for {
-					switch r := s.next(); {
-					case r == '{':
-						s.emit(tokenLeftCurly)
-						return s.enterTextBlock(syscmd)
-					case r == '}':
-						s.emit(tokenRightCurly)
-						return s.exitTextBlock()
-					case isEndOfFile(r):
-						s.errorf("end of file while processing command")
-					default:
-						s.errorf("invalid character '%q' in command", r)
-					}
-				}
-			}
+// 			s.next()
+// 			pk := s.peek()
+// 			if pk == '{' {
+// 				// input: •(cmd){...}
+// 				// s.pos:       ^
+// 				for {
+// 					switch r := s.next(); {
+// 					case r == '{':
+// 						s.emit(tokenLeftCurly)
+// 						return s.enterTextBlock(syscmd)
+// 					case r == '}':
+// 						s.emit(tokenRightCurly)
+// 						return s.exitTextBlock()
+// 					case isEndOfFile(r):
+// 						s.errorf("end of file while processing command")
+// 					default:
+// 						s.errorf("invalid character '%q' in command", r)
+// 					}
+// 				}
+// 			}
 
-			run = false
-		case r == ',':
-			if s.pos > s.start {
-				s.emit(tokenSysCmd)
-			}
+// 			run = false
+// 		case r == ',':
+// 			if s.pos > s.start {
+// 				s.emit(tokenSysCmd)
+// 			}
 
-			s.next()
-			s.emit(tokenComma)
-		case isSpace(r), isEndOfLine(r):
-			if s.pos > s.start {
-				s.emit(tokenSysCmd)
-			}
+// 			s.next()
+// 			s.emit(tokenComma)
+// 		case isSpace(r), isEndOfLine(r):
+// 			if s.pos > s.start {
+// 				s.emit(tokenSysCmd)
+// 			}
 
-			s.eatSpaces()
-		case isEndOfFile(r):
-			s.errorf("end of file in sysCmd call")
-		default:
-			s.errorf("invalid character %q in sysCmd", r)
-		}
-	}
-	return scanText
-}
+// 			s.eatSpaces()
+// 		case isEndOfFile(r):
+// 			s.errorf("end of file in sysCmd call")
+// 		default:
+// 			s.errorf("invalid character %q in sysCmd", r)
+// 		}
+// 	}
+// 	return scanText
+// }
 
 // scanRunes creates a token of arbitrary runes.
 func scanRunes(s *scanner) {
@@ -1050,18 +1068,27 @@ func scanEolComment(s *scanner) ƒ {
 
 func (s *scanner) enterTextBlock(m cmdType) ƒ {
 	switch {
-	case m == short && s.altTerm:
+	case m == short:
+		c := &cmdAttrs{
+			extended: false,
+			init: s.init,
+			altTerm: s.altTerm,
+		}
+
 		s.cmdDepth += 1
-		s.pushCmd(shortAlt)
-	case m == short && !s.altTerm:
-		s.cmdDepth += 1
-		s.pushCmd(short)
-	case m == full && s.altTerm:
-		s.pushCmd(fullAlt)
-	case m == full && !s.altTerm:
-		s.pushCmd(full)
+		s.pushCmd(c)
+
+	case m == full:
+		c := &cmdAttrs{
+			extended: true,
+			init: s.init,
+			altTerm: s.altTerm,
+		}
+		s.pushCmd(c)
+
 	default:
 		s.errorf("unknown command type when entering text block")
+
 	}
 	return scanText
 }
@@ -1072,27 +1099,18 @@ func (s *scanner) exitTextBlock() (f ƒ) {
 		s.ignore()
 		s.eatSpaces()
 	}
-	m := s.popCmd()
-	switch m {
-	case shortAlt:
-		s.altTerm = true
-		fallthrough
-	case short:
+	c := s.popCmd()
+	s.init = c.init
+	s.altTerm = c.altTerm
+	if c.extended {
+		f = scanFullCmd
+	} else {
 		s.cmdDepth -= 1
 		if s.cmdDepth < 1 && s.isParScanAllowed() && s.isParScanOff() {
 			s.setParScanOn()
 		}
 		cobra.Tag("scan").Tag("scan").LogV("done scanning short command")
 		f = scanText
-	case fullAlt:
-		s.altTerm = true
-		fallthrough
-	case full:
-		f = scanFullCmd
-	case syscmd:
-		f = scanText
-	default:
-		s.errorf("unknown command type when exiting text block")
 	}
 	return
 }

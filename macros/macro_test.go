@@ -27,6 +27,12 @@ func stopFmtUnusedError() {
 
 func TestValidateArgs(t *testing.T) {
 	var m *Macro
+	m = NewMacro("testCmd", "hi", nil, nil)
+	testValidateArgs(t, newArgsCheckTestCase(m,
+		"bare macro",
+		"•testCmd{}", 0,
+		"", true))
+
 	opt := Optional{Name: "cThree", Default: ""}
 	m = NewMacro("testMacro", "", []string{"aOne", "bTwo"}, []*Optional{&opt})
 	testValidateArgs(t, newArgsCheckTestCase(m,

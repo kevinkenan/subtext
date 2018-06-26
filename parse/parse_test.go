@@ -162,7 +162,7 @@ var parseTestCases = []parseTestCase{
 	{"anonymous command with line breaks", "1 •2[{a\nb} {c\nd}] 4", "1 •2[<>{a\nb}{c\nd}] 4", 6, false, false},
 	{"two named args on different lines", "1 •2[x={a}\ny={b}]3", "1 •2[<>x={a}y={b}]3", 6, false, false},
 	{"complex context with named args", "1 •2[1={a}2={b •x{c}}] 4", "1 •2[<>1={a}2={b •x[<>{c}]}] 4", 8, false, false},
-	{"line breaks", "\n\n1\n\n2\n\n3\n", "\n\n1\n\n2\n\n3\n", 3, false, false},
+	{"line breaks", "\n\n1\n\n2\n\n3\n", "\n\n1\n\n2\n\n3\n", 2, false, false},
 	{"line breaks with parscan flag on", "¶+\n\n1\n\n2\n\n3\n", "•sys.paragraph.begin[<>{}]1•sys.paragraph.end[<>{\n\n}]•sys.paragraph.begin[<>{}]2•sys.paragraph.end[<>{\n\n}]•sys.paragraph.begin[<>{}]3•sys.paragraph.end[<>{\n}]", 16, false, false},
 
 	// SysCmd tests
@@ -192,9 +192,9 @@ var parParseTestCases = []parseTestCase{
 	{"line breaks with parscan flag", "\n\n1¶-\n\n¶+2\n\n3\n",
 		"•sys.paragraph.begin[<>{}]1\n\n2•sys.paragraph.end[<>{\n\n}]•sys.paragraph.begin[<>{}]3•sys.paragraph.end[<>{\n}]",
 		13, false, false},
-	{"line breaks with parscan flag off", "¶-\n\n1\n\n2\n\n3\n", "\n\n1\n\n2\n\n3\n", 3, false, false},
+	{"line breaks with parscan flag off", "¶-\n\n1\n\n2\n\n3\n", "\n\n1\n\n2\n\n3\n", 2, false, false},
 	{"vertical mode test", "\n\n§a{b}\n\ncde\n",
-		"•sys.paragraph.begin[<>{}]•sys.paragraph.end[<>{}]•a[<>{b}]•sys.paragraph.begin[<>{}]cde•sys.paragraph.end[<>{\n}]", 12, false, false},
+		"•a[<>{b}]•sys.paragraph.begin[<>{}]cde•sys.paragraph.end[<>{\n}]", 8, false, false},
 }
 
 func TestParse(t *testing.T) {

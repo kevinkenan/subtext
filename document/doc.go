@@ -22,6 +22,7 @@ type Document struct {
 	Root     *parse.Section
 	macros   map[string]*macros.Macro
 	Plain    bool // Don't generate paragraphs or aggressively eat whitespace
+	ReflowPars    bool       // if true, remove new lines and collapse whitespace in paragraphs
 }
 
 type RenderError struct {
@@ -42,7 +43,6 @@ type Render struct {
 	depth         int        // tracks recursion depth
 	skipNodeCount int        // skip the next nodes
 	init          bool       // true if in init mode (no output is written)
-
 }
 
 // func NewRenderEngine(d *Document) *Render {
@@ -155,7 +155,7 @@ func (r *Render) renderNode(n parse.Node) string {
 		return ""
 	}
 	r.depth += 1
-	if r.depth > 10 {
+	if r.depth > 20 {
 		panic(RenderError{message: "exceeded call depth"})
 	}
 	s := new(strings.Builder)
@@ -180,11 +180,14 @@ func (r *Render) renderNode(n parse.Node) string {
 
 		cobra.Tag("render").LogV("rendering text")
 
-		if r.ParagraphMode && !r.InParagraph {
-			r.InParagraph = true
-		}
-
-		s.WriteString(n.(*parse.Text).GetText())
+		// reflow paragraph if requested
+		var text string
+		if r.ParagraphMode && r.InParagraph && r.ReflowPars {
+			text = strings.Join(strings.Fields(n.(*parse.Text).GetText()), " ")
+		} else {
+		 	text = n.(*parse.Text).GetText()
+		 }
+		s.WriteString(text)
 
 	case *parse.Cmd:
 		c := n.(*parse.Cmd)
@@ -307,15 +310,11 @@ func (r *Render) processCmd(n *parse.Cmd) string {
 		switch {
 		case name == "sys.paragraph.begin":
 			n.NodeValue = parse.NodeValue("paragraph.begin")
+			r.InParagraph = true
 			r.ParBuffer = n
-			// skip := r.isFollowedByParEnd(n)
-			// if skip > 0 {
-			// 	cobra.Tag("render").LogfV("empty paragraph so skipping nodes")
-			// 	r.skipNodeCount += skip
-			// 	return ""
-			// }
 			return ""
 		case name == "sys.paragraph.end":
+			r.InParagraph = false
 			if r.ParBuffer != nil {
 				r.ParBuffer = nil
 				cobra.Tag("render").LogfV("empty paragraph so skipping nodes")

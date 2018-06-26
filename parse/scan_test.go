@@ -783,8 +783,8 @@ var parGenTestCases = []testParCase{
 	}()),
 	newParCase("vertical mode cmd with 2 args", "§a[{xyz}{a\n\nX}] •abc\n\n3", "", "", func() []token {
 		t := NewTC()
-		t.add(newParSeq("begin", ""))
-		t.add(newParSeq("end", ""))
+		// t.add(newParSeq("begin", ""))
+		// t.add(newParSeq("end", ""))
 		t.add(tkns(tokenCmdStart, "V"))
 		t.add(tkns(tokenName, "a"))
 		t.add(tkns(tokenLeftSquare, "["))
@@ -843,8 +843,8 @@ var parGenTestCases = []testParCase{
 	}()),
 	newParCase("horizontal mode inside a vertical command", "§1{a•X{Y}b}3", "", "", func() []token {
 		t := NewTC()
-		t.add(newParSeq("begin", ""))
-		t.add(newParSeq("end", ""))
+		// t.add(newParSeq("begin", ""))
+		// t.add(newParSeq("end", ""))
 		t.add(newCmdSeqPre("1", "V"))
 		t.add(tkns(tokenText, "a"))
 		t.add(newCmdSeq("X", "H", "Y"))

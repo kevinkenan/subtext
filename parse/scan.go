@@ -121,7 +121,6 @@ type scanner struct {
 	cmdStack           []*cmdAttrs
 	parMode            bool // true when the scanner is invoked with scan instead of scanPlain
 	diableParScanFlags bool // when true, the scanner ignores ¶ commands
-	allowParScan       bool // When false, the scanner is not allowed to insert paragraphs
 	parScannerOn       bool // when true, the scanner generates paragraph commands
 	parScanFlag        bool // set by ¶ command
 	parOpen            bool // tracks if every par begin is matched by a par end
@@ -137,7 +136,6 @@ func NewScanner(name, input string) *scanner {
 		parCmd:        "¶",
 		tokens:        make(chan token),
 		line:          1,
-		allowParScan:  true,
 		parMode:       true,
 		parScannerOn:  true,
 		parScanFlag:   true,
@@ -173,7 +171,6 @@ func scan(name, input string) *scanner {
 func scanPlain(name, input string) *scanner {
 	cobra.Tag("scan").WithField("name", name).LogV("scanning input in plain mode (scan)")
 	s := NewScanner(name, input)
-	s.allowParScan = true
 	s.parMode = false
 	s.parScannerOn = false
 	s.parScanFlag = false
@@ -190,7 +187,7 @@ func scanWith(s *scanner) *scanner {
 // run runs the state machine for the scanner.
 func (s *scanner) run() {
 	cobra.Tag("scan").Tag("scan").LogV("start scanning")
-	for state := scanBeginning; state != nil; {
+	for state := scanText; state != nil; {
 		state = state(s)
 	}
 	close(s.tokens)
@@ -202,7 +199,7 @@ func (s *scanner) isParScanAllowed() bool {
 }
 
 func (s *scanner) isParMode() bool {
-	return s.parMode && s.allowParScan
+	return s.parMode
 }
 
 func (s *scanner) isParScanFlagDisabled() bool {
@@ -210,7 +207,7 @@ func (s *scanner) isParScanFlagDisabled() bool {
 }
 
 func (s *scanner) isParScanFlag() bool {
-	return s.allowParScan && s.parScanFlag
+	return s.parScanFlag
 }
 
 func (s *scanner) setParScanFlag(b bool) bool {
@@ -252,7 +249,7 @@ func (s *scanner) setParScan(b bool) bool {
 }
 
 func (s *scanner) isInsidePar() bool {
-	return s.allowParScan && s.parOpen
+	return s.parOpen
 }
 
 func (s *scanner) setInsidePar(b bool) bool {
@@ -476,92 +473,6 @@ func (s *scanner) emitSysCmd(t tokenType, args string) {
 // ƒ represents the state machine that returns the next state.
 type ƒ func(*scanner) ƒ
 
-func scanBeginning(s *scanner) ƒ {
-	cobra.Tag("scan").LogV("beginning scan")
-	if s.isParScanOn() {
-		s.eatSpaces()
-	}
-Loop:
-	for {
-		switch r := s.peek(); {
-		case isSpace(r) || isEndOfLine(r):
-			if s.isParScanOn() {
-				s.eatSpaces()
-			} else {
-				s.next()
-			}
-		case s.isCmdCmd(r):
-			s.sendInitialParagraph()
-			return scanNewCommand
-		case r == '¶':
-			s.emit(tokenText) // just white space
-			s.next()
-			switch nxt := s.next(); {
-			case nxt == '+':
-				cobra.Tag("scan").Add("line", s.line).LogV("¶+")
-				s.ignore()
-				if !s.isParScanFlagDisabled() {
-					cobra.Tag("scan").LogV("turning paragraph scan on")
-					s.setParScanFlag(true)
-					s.setParScanOn()
-					return scanBeginning
-				}
-			case nxt == '-':
-				cobra.Tag("scan").Add("line", s.line).LogV("¶-")
-				s.ignore()
-				if !s.isParScanFlagDisabled() {
-					cobra.Tag("scan").LogV("turning paragraph scan off")
-					if s.isInsidePar() {
-						cobra.Tag("scan").LogV("flushing open paragraph")
-						s.insertParagraphEndCmd()
-					}
-					s.setParScanFlag(false)
-					s.setParScanOff()
-				}
-			default:
-				s.errorf("character %q not a valid character to follow ¶", nxt)
-			}
-		case s.isCommentToggle(r):
-			s.emit(tokenText) // just white space
-			scanCommentToggle(s)
-		case isEndOfFile(r):
-			s.emit(tokenText) // all the white space gathered so far
-			break Loop
-		default:
-			if sent := s.sendInitialParagraph(); !sent {
-				s.emit(tokenText)
-			}
-			cobra.Tag("scan").Add("line", s.line).Strunc("char", string(r)).LogV("done scanBeginning")
-			return scanText
-		}
-	}
-	s.emit(tokenEOF)
-	cobra.Tag("scan").WithField("name", s.name).LogV("completed scanBeginning")
-	return nil
-}
-
-// sendInitialParagraph sends a paragraph when needed at the beginning of the
-// document and whenever paragraph scanning is turned back on.
-func (s *scanner) sendInitialParagraph() (sent bool) {
-	if s.isParScanOn() && !s.isInsidePar() {
-		cobra.Tag("scan").LogV("insertParagraphBeginCmd (initial par)")
-		s.setParScanOn()
-		s.setInsidePar(true)
-		s.emitInsertedToken(tokenCmdStart, "")
-		s.emitInsertedToken(tokenName, "sys.paragraph.begin")
-		s.emitInsertedToken(tokenLeftSquare, "[")
-		s.emitInsertedToken(tokenLeftCurly, "{")
-		s.emitRawToken(tokenText) // will contain all the opening white space
-		s.emitInsertedToken(tokenRightCurly, "}")
-		s.emitInsertedToken(tokenRightSquare, "]")
-		sent = true
-	} else {
-		cobra.Tag("scan").LogV("no initial paragraph")
-		s.emit(tokenText)
-	}
-	return
-}
-
 func scanText(s *scanner) ƒ {
 	cobra.Tag("scan").LogV("scanText")
 	if s.isParScanOn() && !s.isInsidePar() {
@@ -571,7 +482,7 @@ Loop:
 	for {
 		switch r := s.next(); {
 		case isAlphaNumeric(r):
-			if !s.isInsidePar() && s.isParScanOn() {
+			if s.isParScanOn() && !s.isInsidePar() {
 				s.backup()
 				cobra.Tag("scan").WithField("length", len(s.input[s.start:s.pos])).Add("line", s.line).LogfV("alphanumeric buffer")
 				s.insertParagraphBeginCmd()
@@ -603,7 +514,7 @@ Loop:
 					cobra.Tag("scan").LogV("turning paragraph scan on")
 					s.setParScanFlag(true)
 					s.setParScanOn()
-					return scanBeginning
+					return scanText
 				}
 			case nxt == '-':
 				cobra.Tag("scan").Add("line", s.line).LogV("encountered ¶-")
@@ -894,11 +805,7 @@ func scanFullCmd(s *scanner) ƒ {
 
 			if s.cmdDepth < 1 && s.isParScanAllowed() && s.isParScanOff() {
 				s.setParScanOn()
-				return scanBeginning
-			}
-
-			if s.isParScanOn() {
-				s.eatSpaces()
+				return scanText
 			}
 
 			return scanText

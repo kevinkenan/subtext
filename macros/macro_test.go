@@ -30,8 +30,8 @@ func TestValidateArgs(t *testing.T) {
 	m = NewMacro("testCmd", "hi", nil, nil)
 	testValidateArgs(t, newArgsCheckTestCase(m,
 		"bare macro",
-		"•testCmd{}", 0,
-		"", true))
+		"•testCmd[]", 0,
+		"", false))
 
 	opt := Optional{Name: "cThree", Default: ""}
 	m = NewMacro("testMacro", "", []string{"aOne", "bTwo"}, []*Optional{&opt})

@@ -6,7 +6,6 @@ import (
 	"strings"
 	// "text/template"
 	"github.com/kevinkenan/cobra"
-	"github.com/kevinkenan/subtext/macros"
 	"github.com/kevinkenan/subtext/parse"
 	"gopkg.in/yaml.v2"
 )
@@ -20,7 +19,7 @@ type Document struct {
 	Metadata map[string]string
 	Text     string
 	Root     *parse.Section
-	macros   map[string]*macros.Macro
+	macros   map[string]*parse.Macro
 	Plain    bool // Don't generate paragraphs or aggressively eat whitespace
 	ReflowPars    bool       // if true, remove new lines and collapse whitespace in paragraphs
 }
@@ -50,47 +49,47 @@ type Render struct {
 // }
 
 func NewDoc() *Document {
-	d := Document{macros: make(map[string]*macros.Macro)}
+	d := Document{macros: make(map[string]*parse.Macro)}
 	d.AddParagraphMacros()
 	return &d
 }
 
 // func NewDoc() *Document {
-// 	var m *macros.Macro
-// 	// var opt macros.Optional
-// 	// macs := make(map[string]*macros.Macro)
-// 	opt := macros.Optional{Name: "second", Default: "def"}
-// 	d := Document{macros: make(map[string]*macros.Macro)}
-// 	m = macros.NewMacro("a", "<it>{{- .first -}}</it>{{.second}}", []string{"first"}, []*macros.Optional{&opt})
+// 	var m *parse.Macro
+// 	// var opt parse.Optional
+// 	// macs := make(map[string]*parse.Macro)
+// 	opt := parse.Optional{Name: "second", Default: "def"}
+// 	d := Document{macros: make(map[string]*parse.Macro)}
+// 	m = parse.NewMacro("a", "<it>{{- .first -}}</it>{{.second}}", []string{"first"}, []*parse.Optional{&opt})
 // 	d.macros[m.Name] = m
-// 	m = macros.NewMacro("b", "<b>{{.first}}</b>", []string{"first"}, nil) //[]*Optional{&opt})
+// 	m = parse.NewMacro("b", "<b>{{.first}}</b>", []string{"first"}, nil) //[]*Optional{&opt})
 // 	d.macros[m.Name] = m
-// 	m = macros.NewMacro("c", "<sc>{{.first}}</sc>", []string{"first"}, nil) //[]*Optional{&opt})
+// 	m = parse.NewMacro("c", "<sc>{{.first}}</sc>", []string{"first"}, nil) //[]*Optional{&opt})
 // 	d.macros[m.Name] = m
-// 	m = macros.NewMacro("section", "<section>{{.first}}\n</section>", []string{"first"}, nil) //[]*Optional{&opt})
+// 	m = parse.NewMacro("section", "<section>{{.first}}\n</section>", []string{"first"}, nil) //[]*Optional{&opt})
 // 	d.macros[m.Name] = m
-// 	// m = macros.NewMacro("begin", "•b{test}<body>\n•^(pm=on)", []string{"first"}, nil) //[]*Optional{&opt})
-// 	m = macros.NewMacro("begin", "<body>\n•b{test}\n", []string{"first"}, nil) //[]*Optional{&opt})
+// 	// m = parse.NewMacro("begin", "•b{test}<body>\n•^(pm=on)", []string{"first"}, nil) //[]*Optional{&opt})
+// 	m = parse.NewMacro("begin", "<body>\n•b{test}\n", []string{"first"}, nil) //[]*Optional{&opt})
 // 	d.macros[m.Name] = m
-// 	// m = macros.NewMacro("end", "\n</body>•^(pm=off)•-\n", []string{"first"}, nil) //[]*Optional{&opt})
-// 	m = macros.NewMacro("end", "\n</body>\n", []string{"first"}, nil) //[]*Optional{&opt})
+// 	// m = parse.NewMacro("end", "\n</body>•^(pm=off)•-\n", []string{"first"}, nil) //[]*Optional{&opt})
+// 	m = parse.NewMacro("end", "\n</body>\n", []string{"first"}, nil) //[]*Optional{&opt})
 // 	d.macros[m.Name] = m
 // 	return &d
 // }
 
-func (d *Document) AddMacro(m *macros.Macro) {
+func (d *Document) AddMacro(m *parse.Macro) {
 	d.macros[m.Name] = m
 }
 
 func (d *Document) AddParagraphMacros() {
 	// Add sys.paragraph.* macros which are used when paragraph mode is off.
-	d.AddMacro(macros.NewMacro("sys.paragraph.begin", "{{.parbreak}}", []string{"parbreak"}, nil))
-	d.AddMacro(macros.NewMacro("sys.paragraph.end", "{{.parbreak}}", []string{"parbreak"}, nil))
-	// d.AddMacro(macros.NewMacro("paragraph.begin", "<p>", []string{"orig"}, nil))
-	// d.AddMacro(macros.NewMacro("paragraph.end", "</p>\n", []string{"orig"}, nil))
+	d.AddMacro(parse.NewMacro("sys.paragraph.begin", "{{.parbreak}}", []string{"parbreak"}, nil))
+	d.AddMacro(parse.NewMacro("sys.paragraph.end", "{{.parbreak}}", []string{"parbreak"}, nil))
+	// d.AddMacro(parse.NewMacro("paragraph.begin", "<p>", []string{"orig"}, nil))
+	// d.AddMacro(parse.NewMacro("paragraph.end", "</p>\n", []string{"orig"}, nil))
 	// Add paragraph.* macros which are used when paragraph mode is on.
-	d.AddMacro(macros.NewMacro("paragraph.begin", "", nil, []*macros.Optional{macros.NewOptional("ignore", "")}))
-	d.AddMacro(macros.NewMacro("paragraph.end", "\n\n", nil, []*macros.Optional{macros.NewOptional("ignore", "")}))
+	d.AddMacro(parse.NewMacro("paragraph.begin", "", nil, []*parse.Optional{parse.NewOptional("ignore", "")}))
+	d.AddMacro(parse.NewMacro("paragraph.end", "\n\n", nil, []*parse.Optional{parse.NewOptional("ignore", "")}))
 }
 
 func (d *Document) Make() (s string, err error) {
@@ -155,7 +154,7 @@ func (r *Render) renderNode(n parse.Node) string {
 		return ""
 	}
 	r.depth += 1
-	if r.depth > 20 {
+	if r.depth > 50 {
 		panic(RenderError{message: "exceeded call depth"})
 	}
 	s := new(strings.Builder)
@@ -180,13 +179,16 @@ func (r *Render) renderNode(n parse.Node) string {
 
 		cobra.Tag("render").LogV("rendering text")
 
-		// reflow paragraph if requested
+		// // reflow paragraph if requested
 		var text string
 		if r.ParagraphMode && r.InParagraph && r.ReflowPars {
-			text = strings.Join(strings.Fields(n.(*parse.Text).GetText()), " ")
+			cobra.Tag("render").LogV("reflowing paragraph")
+			// text = strings.Join(strings.Fields(n.(*parse.Text).GetText()), " ")
+			text = strings.Replace(n.(*parse.Text).GetText(), "\n", " ", -1)
 		} else {
 		 	text = n.(*parse.Text).GetText()
-		 }
+		}
+		// text := n.(*parse.Text).GetText()
 		s.WriteString(text)
 
 	case *parse.Cmd:
@@ -233,6 +235,11 @@ func (r *Render) processSysCmd(n *parse.Cmd) string {
 	flowStyle := false
 	cobra.Tag("render").WithField("cmd", name).LogV("processing system command (cmd)")
 	switch name {
+	case "sys.configf":
+		flowStyle = true
+		fallthrough
+	case "sys.config":
+		r.handleSysConfigCmd(n, flowStyle)
 	case "sys.init.begin":
 		r.init = true
 	case "sys.init.end":
@@ -255,7 +262,7 @@ func (r *Render) processSysCmd(n *parse.Cmd) string {
 		}
 
 		cobra.Tag("cmd").Strunc("syscmd", args["def"].String()).LogfV("system command: %s", args["def"])
-		var mdef macros.MacroDef
+		var mdef parse.MacroDef
 		if flowStyle {
 			err = yaml.Unmarshal([]byte("{"+args["def"].String()+"}"), &mdef)
 		} else {
@@ -266,9 +273,9 @@ func (r *Render) processSysCmd(n *parse.Cmd) string {
 		}
 		cobra.Tag("cmd").LogfV("marshalled syscmd: %+v", mdef)
 
-		opts := []*macros.Optional{}
+		opts := []*parse.Optional{}
 		for _, opt := range mdef.Optionals {
-			opts = append(opts, macros.NewOptional(opt.Key.(string), opt.Value.(string)))
+			opts = append(opts, parse.NewOptional(opt.Key.(string), opt.Value.(string)))
 		}
 
 		left, right := mdef.Delims[0], mdef.Delims[1]
@@ -281,11 +288,12 @@ func (r *Render) processSysCmd(n *parse.Cmd) string {
 			right = "))"
 		}
 
-		m := &macros.Macro{
+		m := &parse.Macro{
 			Name:         mdef.Name,
 			TemplateText: mdef.Template,
 			Parameters:   mdef.Parameters,
 			Optionals:    opts,
+			Block:        mdef.Block,
 			Ld:           left,
 			Rd:           right,
 		}
@@ -295,6 +303,40 @@ func (r *Render) processSysCmd(n *parse.Cmd) string {
 		cobra.Tag("cmd").LogfV("loaded new macro")
 	}
 	return ""
+}
+
+func (r *Render) handleSysConfigCmd(n *parse.Cmd, flowStyle bool) {
+	name := "sys.config"
+	// Retrieve the sys.newmacro system command
+	d, found := r.macros[name]
+	if !found {
+		panic(RenderError{message: fmt.Sprintf("Line %d: system command %q not defined.", n.GetLineNum(), name)})
+	}
+	cobra.Tag("cmd").Strunc("macro", d.TemplateText).LogfV("retrieved system command definition")
+
+	args, err := d.ValidateArgs(n)
+	if err != nil {
+		panic(RenderError{message: fmt.Sprintf("Line %d: ValidateArgs failed on system command %q: %q", n.GetLineNum(), name, err)})
+	}
+
+	cobra.Tag("cmd").Strunc("syscmd", args["configs"].String()).LogfV("system command: %s", args["configs"])
+	cfg := make(map[interface{}]interface{})
+	if flowStyle {
+		err = yaml.Unmarshal([]byte("{"+args["configs"].String()+"}"), &cfg)
+	} else {
+		err = yaml.Unmarshal([]byte(args["configs"].String()), &cfg)
+	}
+	if err != nil {
+		panic(RenderError{message: fmt.Sprintf("Line %d: unmarshall error for system command %q: %q", n.GetLineNum(), name, err)})
+	}
+	cobra.Tag("cmd").LogfV("marshalled syscmd: %+v", cfg)
+
+	for k, v := range cfg {
+		cobra.Tag("render").Add("key", k).Add("val", v).LogV("setting config from sys command")
+		cobra.Set(k.(string), v)
+	}
+
+	r.ReflowPars = cobra.GetBool("reflow")
 }
 
 func (r *Render) processCmd(n *parse.Cmd) string {
@@ -370,7 +412,7 @@ func (r *Render) processCmd(n *parse.Cmd) string {
 	// return output.String()
 }
 
-func (r *Render) ExecuteMacro(data map[string]string, m *macros.Macro) (string, error) {
+func (r *Render) ExecuteMacro(data map[string]string, m *parse.Macro) (string, error) {
 	s := strings.Builder{}
 	err := m.Template.Delims(m.Ld, m.Rd).Option("missingkey=error").Execute(&s, data)
 	if err != nil {

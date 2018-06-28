@@ -124,6 +124,9 @@ type scanner struct {
 	parScannerOn       bool // when true, the scanner generates paragraph commands
 	parScanFlag        bool // set by ¶ command
 	parOpen            bool // tracks if every par begin is matched by a par end
+	horizMode          bool // true if cmd exists within a paragraph
+	blockMode          bool // true if we are currently in block mode
+	blockModeChange    bool // true when the block mode has changed
 }
 
 func NewScanner(name, input string) *scanner {
@@ -147,6 +150,8 @@ type cmdAttrs struct {
 	extended bool // true if the command includes the full body
 	altTerm bool // true if '*}' terminates a text block
 	init bool     // true if in init mode
+	blockModeChange bool
+
 }
 
 type cmdType int
@@ -274,7 +279,7 @@ func (s *scanner) popCmd() (m *cmdAttrs) {
 	return
 }
 
-// isCmdCmd returns true if the rune is the cmd character.
+// isCmdCmd returns true if the rune is a cmd character.
 func (s *scanner) isCmdCmd(r rune) bool {
 	cmdH, _ := utf8.DecodeRuneInString(s.cmdH)
 	cmdV, _ := utf8.DecodeRuneInString(s.cmdV)
@@ -283,22 +288,23 @@ func (s *scanner) isCmdCmd(r rune) bool {
 
 // getCmdMode returns an "H" if the command should be interpreted in
 // horizontal or a "V" if it should be interpreted in vertical mode.
-func (s *scanner) getCmdMode(r rune) string {
-	cmdH, _ := utf8.DecodeRuneInString(s.cmdH)
-	cmdV, _ := utf8.DecodeRuneInString(s.cmdV)
-	switch r {
-	case cmdH:
+func (s *scanner) getCmdMode() string {
+	if s.horizMode {
 		return "H"
-	case cmdV:
+	} else {
 		return "V"
 	}
-	return ""
+}
+
+// setCmdMode sets the command mode.
+func (s *scanner) setCmdMode(r rune) {
+	hcmd, _ := utf8.DecodeRuneInString(s.cmdH)
+	s.horizMode = r == hcmd
 }
 
 // isHorizCmd returns true if it is a horizontal mode command.
-func (s *scanner) isHorizCmd(r rune) bool {
-	hcmd, _ := utf8.DecodeRuneInString(s.cmdH)
-	return r == hcmd
+func (s *scanner) isHorizCmd() bool {
+	return s.horizMode
 }
 
 // isCommentToggle returns true if the rune is the comment toggle character.
@@ -651,24 +657,27 @@ func scanNewCommand(s *scanner) ƒ {
 	cobra.Tag("scan").Add("line", s.line).LogV("scanNewCommand")
 	cr := s.next()
 	s.ignore()
-	cmdMode := s.getCmdMode(cr)
+	s.setCmdMode(cr)
 
 	// Determine the command
 	switch r := s.peek(); {
 	case isAlphaNumeric(r):
-		cobra.Tag("scan").WithField("mode", cmdMode).LogV("macro command")
+		cobra.Tag("scan").WithField("mode", s.getCmdMode()).LogV("macro command")
 
 		switch {
-		case s.isHorizCmd(cr):
+		case s.isHorizCmd() && !s.blockMode:
 			// If we're not in a paragraph, this will start one for us.
 			s.insertParagraphBeginCmd()
-		case !s.isHorizCmd(cr):
+		case !s.isHorizCmd() && !s.blockMode:
+			s.blockMode = true
+			s.blockModeChange = true
 			s.emit(tokenText)
 			s.insertParagraphEndCmd()
+			s.setParScanOff()
 		}
 
-		s.setParScanOff()
-		s.emitInsertedToken(tokenCmdStart, cmdMode)
+		// s.setParScanOff()
+		s.emitInsertedToken(tokenCmdStart, s.getCmdMode())
 		scanName(s)
 
 		switch s.peek() {
@@ -682,6 +691,11 @@ func scanNewCommand(s *scanner) ƒ {
 			s.next()
 			s.ignore()
 			s.eatSpaces()
+		}
+
+		if s.blockMode {
+			s.blockMode = false
+			s.blockModeChange = false
 		}
 
 		cobra.Tag("scan").LogV("done scanning bare command")
@@ -801,6 +815,11 @@ func scanFullCmd(s *scanner) ƒ {
 				s.next()
 				s.ignore()
 				s.eatSpaces()
+			}
+
+			if s.blockMode {
+				s.blockMode = false
+				s.blockModeChange = false
 			}
 
 			if s.cmdDepth < 1 && s.isParScanAllowed() && s.isParScanOff() {
@@ -977,29 +996,26 @@ func scanEolComment(s *scanner) ƒ {
 // ----------------------------------------------------------------------------
 
 func (s *scanner) enterTextBlock(m cmdType) ƒ {
+	c := &cmdAttrs{
+		extended: false,
+		init: s.init,
+		altTerm: s.altTerm,
+		blockModeChange: s.blockModeChange,
+	}
+
+	s.blockModeChange = false
+
 	switch {
 	case m == short:
-		c := &cmdAttrs{
-			extended: false,
-			init: s.init,
-			altTerm: s.altTerm,
-		}
-
 		s.cmdDepth += 1
 		s.pushCmd(c)
-
 	case m == full:
-		c := &cmdAttrs{
-			extended: true,
-			init: s.init,
-			altTerm: s.altTerm,
-		}
+		c.extended = true
 		s.pushCmd(c)
-
 	default:
 		s.errorf("unknown command type when entering text block")
-
 	}
+
 	return scanText
 }
 
@@ -1009,16 +1025,40 @@ func (s *scanner) exitTextBlock() (f ƒ) {
 		s.ignore()
 		s.eatSpaces()
 	}
+
 	c := s.popCmd()
 	s.init = c.init
 	s.altTerm = c.altTerm
+	s.blockModeChange = c.blockModeChange
+
 	if c.extended {
+		if s.blockModeChange {
+			s.blockMode = false
+			s.blockModeChange = false
+		}
+
+		if !s.isHorizCmd() {
+			s.setParScanOff()
+		}
+
 		f = scanFullCmd
-	} else {
+	} else { // short command
+		if s.blockModeChange {
+			s.blockMode = false
+			s.blockModeChange = false
+		}
+
+		if !s.blockMode && s.isParScanAllowed() {
+			s.setParScanOn()
+		} else {
+			s.setParScanOff()
+		}
+
 		s.cmdDepth -= 1
 		if s.cmdDepth < 1 && s.isParScanAllowed() && s.isParScanOff() {
 			s.setParScanOn()
 		}
+
 		cobra.Tag("scan").Tag("scan").LogV("done scanning short command")
 		f = scanText
 	}

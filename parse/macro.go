@@ -1,4 +1,4 @@
-package macros
+package parse
 
 import (
 	// "errors"
@@ -7,7 +7,6 @@ import (
 	"text/template"
 	// "unicode"
 	// "unicode/utf8"
-	"github.com/kevinkenan/subtext/parse"
 	"gopkg.in/yaml.v2"
 	// "github.com/kevinkenan/cobra"
 )
@@ -17,6 +16,7 @@ type MacroDef struct {
 	Template   string        // The Go template that defines the macro
 	Parameters []string      // Required parameters
 	Optionals  yaml.MapSlice // Optional parameters in correct order
+	Block      bool          // True if macro should be rendered as a block
 	Delims     [2]string     // Left and right delim used in the template
 }
 
@@ -26,6 +26,7 @@ type Macro struct {
 	*template.Template             // the parsed template
 	Parameters         []string    // Required parameters
 	Optionals          []*Optional // Optional parameters in correct order
+	Block              bool        // True if macro should be rendered as a block
 	Ld                 string      // Left delim used in the template
 	Rd                 string      // Right delim used in the template
 }
@@ -94,7 +95,7 @@ func (m *Macro) isOptionalParameter(arg string) (bool, int) {
 
 // CheckArgs returns a NodeMap of all the valid arguments or an error
 // indicating why the arguments are not valid.
-func (m *Macro) ValidateArgs(c *parse.Cmd) (parse.NodeMap, error) {
+func (m *Macro) ValidateArgs(c *Cmd) (NodeMap, error) {
 	selected, unknown, missing := c.SelectArguments(m.Parameters, m.ListOptions())
 	if missing != nil {
 		// Missing required arguments are fatal.
@@ -117,7 +118,7 @@ func (m *Macro) ValidateArgs(c *parse.Cmd) (parse.NodeMap, error) {
 	// The arguments are valid so add any missing optionals.
 	for _, o := range m.Optionals {
 		if _, found := selected[o.Name]; !found {
-			nl, err := parse.ParsePlain(o.Name, o.Default)
+			nl, err := ParsePlain(o.Name, o.Default)
 			if err != nil {
 				return nil, fmt.Errorf("parsing default: %s", err)
 			}

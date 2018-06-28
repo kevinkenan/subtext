@@ -2,7 +2,7 @@ package document
 
 import (
 	"fmt"
-	"github.com/kevinkenan/subtext/macros"
+	"github.com/kevinkenan/subtext/parse"
 	// "github.com/kevinkenan/subtext/verbose"
 	// "strings"
 	"github.com/kevinkenan/cobra"
@@ -54,7 +54,7 @@ func TestMake(t *testing.T) {
 	testMake(t, rƒ, false, "custom final pararagraph simple", "1\n  \n \n \n \n", "<p>1</p>\n")
 	testMake(t, rƒ, false, "custom final pararagraph", "1\n  \n2\n   \n\n          ", "<p>1</p>\n<p>2</p>\n")
 	testMake(t, rƒ, false, "custom initial pararagraphs mode on", "\n\n     \n1\n \n2", "<p>1</p>\n<p>2</p>\n")
-	testMake(t, rƒ, false, "custom pararagraphs with command", "1\n\n•a{2\n\n3}4", "<p>1</p>\n<p>2\n\n34</p>\n")
+	testMake(t, rƒ, false, "custom pararagraphs with command", "1\n\n•a{2\n\n3}4", "<p>1</p>\n<p>2</p>\n<p>34</p>\n")
 	testMake(t, rƒ, false, "custom par with vertical command", "1\n\n§pre{\n\n2\n\n3\n\n}4", "<p>1</p>\n<pre>\n\n2\n\n3\n\n</pre>\n<p>4</p>\n")
 	testMake(t, rƒ, false, "custom par with horizontal command", "1\n\n•pre{2}3", "<p>1</p>\n<p><pre>2</pre>\n3</p>\n")
 }
@@ -89,10 +89,10 @@ func testMakeFull(t *testing.T, rƒ func(string) *Render, expErr bool, name, com
 }
 
 func mockDocOne(input string) *Render {
-	var m *macros.Macro
-	// d := Document{macros: make(map[string]*macros.Macro)}
+	var m *parse.Macro
+	// d := Document{macros: make(map[string]*parse.Macro)}
 	d := NewDoc()
-	m = macros.NewMacro("test", "Hi {{.first}}.", []string{"first"}, nil)
+	m = parse.NewMacro("test", "Hi {{.first}}.", []string{"first"}, nil)
 	d.macros[m.Name] = m
 	d.Text = input
 	r := &Render{Document: d}
@@ -100,11 +100,11 @@ func mockDocOne(input string) *Render {
 }
 
 func mockDocTwo(input string) *Render {
-	var m *macros.Macro
-	// d := Document{macros: make(map[string]*macros.Macro)}
+	var m *parse.Macro
+	// d := Document{macros: make(map[string]*parse.Macro)}
 	d := NewDoc()
-	opt := macros.Optional{Name: "second", Default: "def"}
-	m = macros.NewMacro("test", "Hi {{.first}}{{.second}}.", []string{"first"}, []*macros.Optional{&opt})
+	opt := parse.Optional{Name: "second", Default: "def"}
+	m = parse.NewMacro("test", "Hi {{.first}}{{.second}}.", []string{"first"}, []*parse.Optional{&opt})
 	d.macros[m.Name] = m
 	d.Text = input
 	r := &Render{Document: d}
@@ -112,15 +112,15 @@ func mockDocTwo(input string) *Render {
 }
 
 func mockDocThree(input string) *Render {
-	var m *macros.Macro
-	// opt := macros.Optional{Name: "second", Default: "def"}
-	// d := Document{macros: make(map[string]*macros.Macro)}
+	var m *parse.Macro
+	// opt := parse.Optional{Name: "second", Default: "def"}
+	// d := Document{macros: make(map[string]*parse.Macro)}
 	d := NewDoc()
-	m = macros.NewMacro("a", "<a> {{- .first -}} </a>", []string{"first"}, nil)
+	m = parse.NewMacro("a", "<a> {{- .first -}} </a>", []string{"first"}, nil)
 	d.macros[m.Name] = m
-	m = macros.NewMacro("b", "<b>{{.first}}</b>", []string{"first"}, nil) //[]*Optional{&opt})
+	m = parse.NewMacro("b", "<b>{{.first}}</b>", []string{"first"}, nil) //[]*Optional{&opt})
 	d.macros[m.Name] = m
-	m = macros.NewMacro("c", "<c>{{.first}}</c>", []string{"first"}, nil) //[]*Optional{&opt})
+	m = parse.NewMacro("c", "<c>{{.first}}</c>", []string{"first"}, nil) //[]*Optional{&opt})
 	d.macros[m.Name] = m
 	d.Text = input
 	r := &Render{Document: d}
@@ -137,10 +137,10 @@ func mockDocFour(input string) *Render {
 
 func mockDocFive(input string) *Render {
 	d := NewDoc()
-	d.AddMacro(macros.NewMacro("paragraph.begin", "<p>", []string{"orig"}, nil))
-	d.AddMacro(macros.NewMacro("paragraph.end", "</p>\n", []string{"orig"}, nil))
-	d.AddMacro(macros.NewMacro("a", "{{.body}}", []string{"body"}, nil))
-	d.AddMacro(macros.NewMacro("pre", "<pre>{{.body}}</pre>\n", []string{"body"}, nil))
+	d.AddMacro(parse.NewMacro("paragraph.begin", "<p>", []string{"orig"}, nil))
+	d.AddMacro(parse.NewMacro("paragraph.end", "</p>\n", []string{"orig"}, nil))
+	d.AddMacro(parse.NewMacro("a", "{{.body}}", []string{"body"}, nil))
+	d.AddMacro(parse.NewMacro("pre", "<pre>{{.body}}</pre>\n", []string{"body"}, nil))
 	d.Text = input
 	r := &Render{Document: d}
 	r.ParagraphMode = true

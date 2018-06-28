@@ -4,17 +4,19 @@ import (
 	"bufio"
 	"fmt"
 	"github.com/kevinkenan/subtext/document"
-	"github.com/kevinkenan/subtext/macros"
 	"io"
 	"io/ioutil"
 	"os"
+	// "bytes"
 	// "strings"
 	// "text/template"
+    // "golang.org/x/net/html"
 	"github.com/kevinkenan/subtext/parse"
 	// "github.com/kevinkenan/subtext/macros"
 	// "github.com/kevinkenan/subtext/commands"
 	// "github.com/kevinkenan/subtext/verbose"
 	"github.com/kevinkenan/cobra"
+	// "github.com/kevinkenan/gohtml"
 )
 
 // func render(root *parse.Section, d *doc) string {
@@ -96,20 +98,20 @@ import (
 // }
 
 // type doc struct {
-// 	macros map[string]*macros.Macro
+// 	macros map[string]*parse.Macro
 // }
 
 // func NewDoc() *doc {
-// 	var m *macros.Macro
-// 	// var opt macros.Optional
-// 	// macs := make(map[string]*macros.Macro)
-// 	opt := macros.Optional{Name: "second", Default: "def"}
-// 	d := doc{make(map[string]*macros.Macro)}
-// 	m = macros.NewMacro("a", "<it>{{- .first -}}</it>{{.second}}", []string{"first"}, []*macros.Optional{&opt})
+// 	var m *parse.Macro
+// 	// var opt parse.Optional
+// 	// macs := make(map[string]*parse.Macro)
+// 	opt := parse.Optional{Name: "second", Default: "def"}
+// 	d := doc{make(map[string]*parse.Macro)}
+// 	m = parse.NewMacro("a", "<it>{{- .first -}}</it>{{.second}}", []string{"first"}, []*parse.Optional{&opt})
 // 	d.macros[m.Name] = m
-// 	m = macros.NewMacro("b", "<b>{{.first}}</b>", []string{"first"}, nil) //[]*Optional{&opt})
+// 	m = parse.NewMacro("b", "<b>{{.first}}</b>", []string{"first"}, nil) //[]*Optional{&opt})
 // 	d.macros[m.Name] = m
-// 	m = macros.NewMacro("c", "<sc>{{.first}}</sc>", []string{"first"}, nil) //[]*Optional{&opt})
+// 	m = parse.NewMacro("c", "<sc>{{.first}}</sc>", []string{"first"}, nil) //[]*Optional{&opt})
 // 	d.macros[m.Name] = m
 // 	return &d
 // }
@@ -160,14 +162,15 @@ func MakeCmd(cmd *cobra.Command, args []string) error {
 	d.Plain = cobra.GetBool("plain")
 	d.ReflowPars = cobra.GetBool("reflow")
 	d.Text = string(input)
-	d.AddMacro(macros.NewMacro("paragraph.begin", "<p>", []string{"orig"}, nil))
-	d.AddMacro(macros.NewMacro("paragraph.end", "</p>\n\n", []string{"orig"}, nil))
-	d.AddMacro(macros.NewMacro("title", "<h1>{{.text}}</h1>\n\n", []string{"text"}, nil))
-	d.AddMacro(macros.NewMacro("section", "<h2>{{.text}}</h2>\n\n", []string{"text"}, nil))
-	d.AddMacro(macros.NewMacro("emph", "<i>{{.text}}</i>", []string{"text"}, nil))
-	// d.AddMacro(macros.NewMacro("chapter", "<chapter>{{.text}}</chapter>\n", []string{"text"}, nil))
-	d.AddMacro(macros.NewMacro("chapter", "<chapter>\n\n¶+{{.text}}\n\n¶-</chapter>\n", []string{"text"}, nil))
-	d.AddMacro(macros.NewMacro("sys.newmacro", "", []string{"def"}, nil))
+	d.AddMacro(parse.NewMacro("paragraph.begin", "<p>", []string{"orig"}, nil))
+	d.AddMacro(parse.NewMacro("paragraph.end", "</p>\n\n", []string{"orig"}, nil))
+	d.AddMacro(parse.NewMacro("title", "<h1>{{.text}}</h1>\n\n", []string{"text"}, nil))
+	d.AddMacro(parse.NewMacro("section", "<h2>{{.text}}</h2>\n\n", []string{"text"}, nil))
+	d.AddMacro(parse.NewMacro("emph", "<i>{{.text}}</i>", []string{"text"}, nil))
+	// d.AddMacro(parse.NewMacro("chapter", "<chapter>{{.text}}</chapter>\n", []string{"text"}, nil))
+	d.AddMacro(parse.NewMacro("chapter", "<chapter>\n\n¶+{{.text}}\n\n¶-</chapter>\n", []string{"text"}, nil))
+	d.AddMacro(parse.NewMacro("sys.newmacro", "", []string{"def"}, nil))
+	d.AddMacro(parse.NewMacro("sys.config", "", []string{"configs"}, nil))
 	output, err := d.Make()
 	if err != nil {
 		return err
@@ -219,10 +222,10 @@ func WalkCmd(cmd *cobra.Command, args []string) {
 	d.Output = cobra.GetString("output")
 	d.Packages = cobra.GetStringSlice("packages")
 	d.Text = string(input)
-	d.AddMacro(macros.NewMacro("paragraph.begin", "<p>", []string{"orig"}, nil))
-	d.AddMacro(macros.NewMacro("paragraph.end", "</p>\n\n", []string{"orig"}, nil))
-	d.AddMacro(macros.NewMacro("title", "<h1>{{.text}}</h1>", []string{"text"}, nil))
-	d.AddMacro(macros.NewMacro("section", "<h2>{{.text}}</h2>", []string{"text"}, nil))
+	d.AddMacro(parse.NewMacro("paragraph.begin", "<p>", []string{"orig"}, nil))
+	d.AddMacro(parse.NewMacro("paragraph.end", "</p>\n\n", []string{"orig"}, nil))
+	d.AddMacro(parse.NewMacro("title", "<h1>{{.text}}</h1>", []string{"text"}, nil))
+	d.AddMacro(parse.NewMacro("section", "<h2>{{.text}}</h2>", []string{"text"}, nil))
 	root, _ := parse.Parse(name, string(input))
 
 	c := make(chan parse.Node)

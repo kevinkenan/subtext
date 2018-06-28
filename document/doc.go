@@ -21,6 +21,7 @@ type Document struct {
 	Root     *parse.Section
 	Plain    bool // Don't generate paragraphs or aggressively eat whitespace
 	ReflowPars    bool       // if true, remove new lines and collapse whitespace in paragraphs
+	macrosIn        []*parse.Macro
 }
 
 type RenderError struct {
@@ -49,7 +50,7 @@ type Render struct {
 // }
 
 func NewDoc() *Document {
-	d := Document{}
+	d := Document{macrosIn: []*parse.Macro{}}
 	// d.AddParagraphMacros()
 	return &d
 }
@@ -78,7 +79,7 @@ func NewDoc() *Document {
 // }
 
 func (d *Document) AddMacro(m *parse.Macro) {
-	// d.macros[m.Name] = m
+	d.macrosIn = append(d.macrosIn, m)
 }
 
 func (d *Document) AddParagraphMacros() {
@@ -94,7 +95,7 @@ func (d *Document) AddParagraphMacros() {
 
 func (d *Document) Make() (s string, err error) {
 	r := &Render{Document: d, ParagraphMode: !d.Plain}
-	s, err = MakeWith(d.Text, r)
+	s, err = MakeWith(d.Text, r, d.macrosIn)
 	return
 }
 
@@ -102,7 +103,7 @@ func (d *Document) Make() (s string, err error) {
 // context. Most of the time the Document's Make is used (which calls
 // MakeWith), but MakeWith itself is useful for handling macros embedded in
 // templates.
-func MakeWith(t string, r *Render) (s string, err error) {
+func MakeWith(t string, r *Render, m []*parse.Macro) (s string, err error) {
 	defer func() { cobra.LogV("finished rendering") }()
 	defer func() {
 		if e := recover(); e != nil {
@@ -119,9 +120,9 @@ func MakeWith(t string, r *Render) (s string, err error) {
 	var macros parse.MacroMap
 
 	if r.ParagraphMode {
-		root, macros, err = parse.Parse(r.Name, t)
+		root, macros, err = parse.Parse(r.Name, t, m)
 	} else {
-		root, macros, err = parse.ParsePlain(r.Name, t)
+		root, macros, err = parse.ParsePlain(r.Name, t, m)
 	}
 
 	if err != nil {
@@ -402,7 +403,7 @@ func (r *Render) processCmd(n *parse.Cmd) string {
 	cmdLog.Copy().Add("name", name).Add("ld", m.Ld).Logf("executed macro, ready for parsing")
 
 	// Handle commands embedded in the macro.
-	output, _, err := parse.ParsePlain(name, s)
+	output, _, err := parse.ParsePlain(name, s, nil)
 	if err != nil {
 		panic(RenderError{message: fmt.Sprintf("Line %d: error in template for macro %q: %q", n.GetLineNum(), name, err)})
 	} else {

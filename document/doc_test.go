@@ -44,10 +44,10 @@ func TestMake(t *testing.T) {
 	testMake(t, rƒ, false, "paragraph mode off (default initial setting)", "1\n \n2", "1\n \n2")
 
 	rƒ = mockDocFour
-	testMake(t, rƒ, false, "pararagraph mode on", "1\n \n2", "1\n\n2\n\n")
-	testMake(t, rƒ, false, "initial pararagraphs mode on", "\n\n     \n1\n \n2", "1\n\n2\n\n")
-	testMake(t, rƒ, false, "whitespace with pararagraph mode on", "1\n  \n2\n   \n\n3", "1\n\n2\n\n3\n\n")
-	testMake(t, rƒ, false, "final pararagraph", "1\n  \n2\n   \n\n          ", "1\n\n2\n\n")
+	testMake(t, rƒ, false, "pararagraph mode on", "1\n \n2", "\n1\n\n2\n")
+	testMake(t, rƒ, false, "initial pararagraphs mode on", "\n\n     \n1\n \n2", "\n1\n\n2\n")
+	testMake(t, rƒ, false, "whitespace with pararagraph mode on", "1\n  \n2\n   \n\n3", "\n1\n\n2\n\n3\n")
+	testMake(t, rƒ, false, "final pararagraph", "1\n  \n2\n   \n\n          ", "\n1\n\n2\n")
 
 	rƒ = mockDocFive
 	testMake(t, rƒ, false, "custom pararagraph markers", "1\n\n \n2\n\n3", "<p>1</p>\n<p>2</p>\n<p>3</p>\n")
@@ -70,7 +70,7 @@ func testMakeV(t *testing.T, rƒ func(string) *Render, expErr bool, name, comman
 func testMakeFull(t *testing.T, rƒ func(string) *Render, expErr bool, name, command, exp string, verb bool) {
 	r := rƒ("") // mockDoc(command)
 	// fmt.Printf("%s: %v\n", name, r.macros["paragraph.begin"].String())
-	s, err := MakeWith(command, r)
+	s, err := MakeWith(command, r, r.macrosIn)
 	// fmt.Printf("%q\n", s)
 	switch {
 	case err != nil && !expErr:
@@ -93,7 +93,7 @@ func mockDocOne(input string) *Render {
 	// d := Document{macros: make(map[string]*parse.Macro)}
 	d := NewDoc()
 	m = parse.NewMacro("test", "Hi {{.first}}.", []string{"first"}, nil)
-	d.macros[m.Name] = m
+	d.macrosIn = append(d.macrosIn, m)
 	d.Text = input
 	r := &Render{Document: d}
 	return r
@@ -105,7 +105,7 @@ func mockDocTwo(input string) *Render {
 	d := NewDoc()
 	opt := parse.Optional{Name: "second", Default: "def"}
 	m = parse.NewMacro("test", "Hi {{.first}}{{.second}}.", []string{"first"}, []*parse.Optional{&opt})
-	d.macros[m.Name] = m
+	d.macrosIn = append(d.macrosIn, m)
 	d.Text = input
 	r := &Render{Document: d}
 	return r
@@ -117,11 +117,11 @@ func mockDocThree(input string) *Render {
 	// d := Document{macros: make(map[string]*parse.Macro)}
 	d := NewDoc()
 	m = parse.NewMacro("a", "<a> {{- .first -}} </a>", []string{"first"}, nil)
-	d.macros[m.Name] = m
+	d.macrosIn = append(d.macrosIn, m)
 	m = parse.NewMacro("b", "<b>{{.first}}</b>", []string{"first"}, nil) //[]*Optional{&opt})
-	d.macros[m.Name] = m
+	d.macrosIn = append(d.macrosIn, m)
 	m = parse.NewMacro("c", "<c>{{.first}}</c>", []string{"first"}, nil) //[]*Optional{&opt})
-	d.macros[m.Name] = m
+	d.macrosIn = append(d.macrosIn, m)
 	d.Text = input
 	r := &Render{Document: d}
 	return r

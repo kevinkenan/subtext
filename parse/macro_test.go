@@ -94,7 +94,7 @@ func newArgsCheckTestCase(m *Macro, n string, cmd string, loc int, exp string, e
 }
 
 func testValidateArgs(t *testing.T, test *argsCheckTestCase) {
-	root, _ := ParsePlain(test.name, test.command)
+	root, _, _ := ParsePlain(test.name, test.command, nil)
 	cmdNode := root.NodeList[test.loc] // +1 to skip the opening paragraph command
 	args, err := test.Macro.ValidateArgs(cmdNode.(*Cmd))
 	switch {

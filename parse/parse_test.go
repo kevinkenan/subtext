@@ -57,7 +57,7 @@ var selectArgumentsTestCases = []selectArgumentsTestCase{
 }
 
 func testSelectArguments(t *testing.T, test *selectArgumentsTestCase) {
-	root, _ := ParsePlain(test.name, test.command)
+	root, _, _ := ParsePlain(test.name, test.command, nil)
 	if len(root.NodeList) < test.loc-1 {
 		t.Errorf("%s: loc (%d) is beyond the end of root.NodeList", test.name, test.loc)
 		return
@@ -224,9 +224,9 @@ func testParse(t *testing.T, tests []parseTestCase, plain bool, start, end int) 
 			err    error
 		)
 		if plain {
-			result, err = ParsePlain(test.name, test.input)
+			result, _, err = ParsePlain(test.name, test.input, nil)
 		} else {
-			result, err = Parse(test.name, test.input)
+			result, _, err = Parse(test.name, test.input, nil)
 		}
 		if test.verbose {
 			if err == nil {

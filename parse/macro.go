@@ -141,7 +141,7 @@ func (m *Macro) ValidateArgs(c *Cmd) (NodeMap, error) {
 	// The arguments are valid so add any missing optionals.
 	for _, o := range m.Optionals {
 		if _, found := selected[o.Name]; !found {
-			nl, _, err := ParsePlain(o.Name, o.Default)
+			nl, _, err := ParsePlain(o.Name, o.Default, nil)
 			if err != nil {
 				return nil, fmt.Errorf("parsing default: %s", err)
 			}

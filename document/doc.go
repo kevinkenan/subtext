@@ -118,9 +118,9 @@ func MakeWith(t string, r *Render) (s string, err error) {
 	var root *parse.Section
 
 	if r.ParagraphMode {
-		root, err = parse.Parse(r.Name, t)
+		root, err = parse.Parse(r.Name, t, r.macros)
 	} else {
-		root, err = parse.ParsePlain(r.Name, t)
+		root, err = parse.ParsePlain(r.Name, t, r.macros)
 	}
 
 	if err != nil {

@@ -9,23 +9,25 @@ import (
 )
 
 // Parse creates a node tree from the tokens produced by scan.
-func Parse(name, input string) (*Section, error) {
+func Parse(name, input string, mac map[string]*.Macro) (*Section, error) {
 	cobra.Tag("parse").WithField("name", name).LogV("parsing input (parse)")
 	p := &parser{
 		scanner: scan(name, input),
 		root:    NewSection(),
 		empty:   true,
+		macros:  mac,
 	}
 	return doParse(name, p)
 }
 
 // ParsePlain is the same as Parse but uses the scanPlain scanner.
-func ParsePlain(name, input string) (*Section, error) {
+func ParsePlain(name, input string, mac map[string]*.Macro) (*Section, error) {
 	cobra.Tag("parse").WithField("name", name).LogV("parsing in plain mode (parse)")
 	p := &parser{
 		scanner: scanPlain(name, input),
 		root:    NewSection(),
 		empty:   true,
+		macros:  mac,
 	}
 	return doParse(name, p)
 }

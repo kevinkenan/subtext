@@ -1,0 +1,11 @@
+.DS_Store
+*.log
+*.out
+*.swp
+*.8
+*.6
+_obj
+_test*
+markdown
+tags
+config.yml

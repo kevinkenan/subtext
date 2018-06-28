@@ -19,7 +19,6 @@ type Document struct {
 	Metadata map[string]string
 	Text     string
 	Root     *parse.Section
-	macros   map[string]*parse.Macro
 	Plain    bool // Don't generate paragraphs or aggressively eat whitespace
 	ReflowPars    bool       // if true, remove new lines and collapse whitespace in paragraphs
 }
@@ -42,6 +41,7 @@ type Render struct {
 	depth         int        // tracks recursion depth
 	skipNodeCount int        // skip the next nodes
 	init          bool       // true if in init mode (no output is written)
+	macros        parse.MacroMap
 }
 
 // func NewRenderEngine(d *Document) *Render {
@@ -49,8 +49,8 @@ type Render struct {
 // }
 
 func NewDoc() *Document {
-	d := Document{macros: make(map[string]*parse.Macro)}
-	d.AddParagraphMacros()
+	d := Document{}
+	// d.AddParagraphMacros()
 	return &d
 }
 
@@ -78,7 +78,7 @@ func NewDoc() *Document {
 // }
 
 func (d *Document) AddMacro(m *parse.Macro) {
-	d.macros[m.Name] = m
+	// d.macros[m.Name] = m
 }
 
 func (d *Document) AddParagraphMacros() {
@@ -116,16 +116,18 @@ func MakeWith(t string, r *Render) (s string, err error) {
 	}()
 
 	var root *parse.Section
+	var macros parse.MacroMap
 
 	if r.ParagraphMode {
-		root, err = parse.Parse(r.Name, t, r.macros)
+		root, macros, err = parse.Parse(r.Name, t)
 	} else {
-		root, err = parse.ParsePlain(r.Name, t, r.macros)
+		root, macros, err = parse.ParsePlain(r.Name, t)
 	}
 
 	if err != nil {
 		return "", err
 	} else {
+		r.macros = macros
 		cobra.LogV("rendering (render)")
 		return r.render(root), nil
 	}
@@ -250,57 +252,57 @@ func (r *Render) processSysCmd(n *parse.Cmd) string {
 		fallthrough
 	case "sys.newmacro":
 		// Retrieve the sys.newmacro system command
-		d, found := r.macros[name]
-		if !found {
-			panic(RenderError{message: fmt.Sprintf("Line %d: system command %q not defined.", n.GetLineNum(), name)})
-		}
-		cobra.Tag("cmd").Strunc("macro", d.TemplateText).LogfV("retrieved system command definition")
+		// d, found := r.macros[name]
+		// if !found {
+		// 	panic(RenderError{message: fmt.Sprintf("Line %d: system command %q not defined.", n.GetLineNum(), name)})
+		// }
+		// cobra.Tag("cmd").Strunc("macro", d.TemplateText).LogfV("retrieved system command definition")
 
-		args, err := d.ValidateArgs(n)
-		if err != nil {
-			panic(RenderError{message: fmt.Sprintf("Line %d: ValidateArgs failed on system command %q: %q", n.GetLineNum(), name, err)})
-		}
+		// args, err := d.ValidateArgs(n)
+		// if err != nil {
+		// 	panic(RenderError{message: fmt.Sprintf("Line %d: ValidateArgs failed on system command %q: %q", n.GetLineNum(), name, err)})
+		// }
 
-		cobra.Tag("cmd").Strunc("syscmd", args["def"].String()).LogfV("system command: %s", args["def"])
-		var mdef parse.MacroDef
-		if flowStyle {
-			err = yaml.Unmarshal([]byte("{"+args["def"].String()+"}"), &mdef)
-		} else {
-			err = yaml.Unmarshal([]byte(args["def"].String()), &mdef)
-		}
-		if err != nil {
-			panic(RenderError{message: fmt.Sprintf("Line %d: unmarshall error for system command %q: %q", n.GetLineNum(), name, err)})
-		}
-		cobra.Tag("cmd").LogfV("marshalled syscmd: %+v", mdef)
+		// cobra.Tag("cmd").Strunc("syscmd", args["def"].String()).LogfV("system command: %s", args["def"])
+		// var mdef parse.MacroDef
+		// if flowStyle {
+		// 	err = yaml.Unmarshal([]byte("{"+args["def"].String()+"}"), &mdef)
+		// } else {
+		// 	err = yaml.Unmarshal([]byte(args["def"].String()), &mdef)
+		// }
+		// if err != nil {
+		// 	panic(RenderError{message: fmt.Sprintf("Line %d: unmarshall error for system command %q: %q", n.GetLineNum(), name, err)})
+		// }
+		// cobra.Tag("cmd").LogfV("marshalled syscmd: %+v", mdef)
 
-		opts := []*parse.Optional{}
-		for _, opt := range mdef.Optionals {
-			opts = append(opts, parse.NewOptional(opt.Key.(string), opt.Value.(string)))
-		}
+		// opts := []*parse.Optional{}
+		// for _, opt := range mdef.Optionals {
+		// 	opts = append(opts, parse.NewOptional(opt.Key.(string), opt.Value.(string)))
+		// }
 
-		left, right := mdef.Delims[0], mdef.Delims[1]
+		// left, right := mdef.Delims[0], mdef.Delims[1]
 
-		if left == "" {
-			left = "(("
-		}
+		// if left == "" {
+		// 	left = "(("
+		// }
 
-		if right == "" {
-			right = "))"
-		}
+		// if right == "" {
+		// 	right = "))"
+		// }
 
-		m := &parse.Macro{
-			Name:         mdef.Name,
-			TemplateText: mdef.Template,
-			Parameters:   mdef.Parameters,
-			Optionals:    opts,
-			Block:        mdef.Block,
-			Ld:           left,
-			Rd:           right,
-		}
+		// m := &parse.Macro{
+		// 	Name:         mdef.Name,
+		// 	TemplateText: mdef.Template,
+		// 	Parameters:   mdef.Parameters,
+		// 	Optionals:    opts,
+		// 	Block:        mdef.Block,
+		// 	Ld:           left,
+		// 	Rd:           right,
+		// }
 
-		m.Parse()
-		r.macros[m.Name] = m
-		cobra.Tag("cmd").LogfV("loaded new macro")
+		// m.Parse()
+		// r.macros[m.Name] = m
+		// cobra.Tag("cmd").LogfV("loaded new macro")
 	}
 	return ""
 }
@@ -366,7 +368,7 @@ func (r *Render) processCmd(n *parse.Cmd) string {
 		}
 	}
 
-	// Check to see if the command matches a macro definition.
+	// Get the macro definition.
 	m, found := r.macros[name]
 	if !found {
 		panic(RenderError{message: fmt.Sprintf("Line %d: macro %q not defined.", n.GetLineNum(), name)})
@@ -400,7 +402,7 @@ func (r *Render) processCmd(n *parse.Cmd) string {
 	cmdLog.Copy().Add("name", name).Add("ld", m.Ld).Logf("executed macro, ready for parsing")
 
 	// Handle commands embedded in the macro.
-	output, err := parse.ParsePlain(name, s)
+	output, _, err := parse.ParsePlain(name, s)
 	if err != nil {
 		panic(RenderError{message: fmt.Sprintf("Line %d: error in template for macro %q: %q", n.GetLineNum(), name, err)})
 	} else {

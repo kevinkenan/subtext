@@ -226,7 +226,7 @@ func WalkCmd(cmd *cobra.Command, args []string) {
 	d.AddMacro(parse.NewMacro("paragraph.end", "</p>\n\n", []string{"orig"}, nil))
 	d.AddMacro(parse.NewMacro("title", "<h1>{{.text}}</h1>", []string{"text"}, nil))
 	d.AddMacro(parse.NewMacro("section", "<h2>{{.text}}</h2>", []string{"text"}, nil))
-	root, _ := parse.Parse(name, string(input))
+	root, _, _ := parse.Parse(name, string(input))
 
 	c := make(chan parse.Node)
 	go root.Walk(c)

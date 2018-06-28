@@ -9,30 +9,30 @@ import (
 )
 
 // Parse creates a node tree from the tokens produced by scan.
-func Parse(name, input string, mac map[string]*.Macro) (*Section, error) {
+func Parse(name, input string) (*Section, MacroMap, error) {
 	cobra.Tag("parse").WithField("name", name).LogV("parsing input (parse)")
 	p := &parser{
 		scanner: scan(name, input),
 		root:    NewSection(),
 		empty:   true,
-		macros:  mac,
+		macros:  NewMacroMap(),
 	}
 	return doParse(name, p)
 }
 
 // ParsePlain is the same as Parse but uses the scanPlain scanner.
-func ParsePlain(name, input string, mac map[string]*.Macro) (*Section, error) {
+func ParsePlain(name, input string) (*Section, MacroMap, error) {
 	cobra.Tag("parse").WithField("name", name).LogV("parsing in plain mode (parse)")
 	p := &parser{
 		scanner: scanPlain(name, input),
 		root:    NewSection(),
 		empty:   true,
-		macros:  mac,
+		macros:  NewMacroMap(),
 	}
 	return doParse(name, p)
 }
 
-func doParse(n string, p *parser) (*Section, error) {
+func doParse(n string, p *parser) (*Section, MacroMap, error) {
 	cobra.WithField("name", n).LogV("parsing (parse)")
 	p.prevNode = p.root // Node(p.root)?
 	return p.start()
@@ -53,6 +53,7 @@ type parser struct {
 	buffer *token // holds the next token if we peek or backup.
 	// cmdDepth int
 	prevNode Node // the previous node
+	macros MacroMap
 }
 
 func (p *parser) nextToken() (t *token) {
@@ -115,11 +116,9 @@ func (p *parser) link(n Node) {
 
 // Parse token stream ---------------------------------------------------------
 
-func (p *parser) start() (n *Section, err error) {
+func (p *parser) start() (n *Section, macs MacroMap, err error) {
 	defer p.recover(&err)
 	cobra.Tag("parse").LogV("parse root level nodes")
-	// return p.debugLoop()
-	// fmt.Println("here")
 Loop:
 	for {
 		t := p.next()
@@ -137,16 +136,16 @@ Loop:
 			n := p.makeCmd(t)
 			n.SysCmd = true
 			n.NodeValue = NodeValue(fmt.Sprintf("sys.%s", n.NodeValue))
-			p.root.append(n)
-			p.link(n)
-			// for _, n := range ns {
-			// 	p.root.append(n)
-			// 	p.link(n)
-			// }
-		// case tokenParagraphStart:
-		// 	p.root.append(NewParagraphStart(t.value))
-		// case tokenParagraphEnd:
-		// 	p.root.append(NewParagraphEnd(t.value))
+
+			switch n.GetCmdName() {
+			case "sys.newmacrof":
+				err = p.addNewMacro(n, true)
+			case "sys.newmacro":
+				err = p.addNewMacro(n, false)
+			default:
+				p.root.append(n)
+				p.link(n)
+			}
 		case tokenError:
 			p.errorf("Line %d: %s", t.lnum, t.value)
 		case tokenEOF:
@@ -154,8 +153,11 @@ Loop:
 		default:
 			p.errorf("Line %d: unexpected token %q when starting with value %q", t.lnum, tokenTypeLookup(t.typeof), t.value)
 		}
+		if err != nil {
+			return nil, nil, err
+		}
 	}
-	return p.root, nil
+	return p.root, p.macros, nil
 }
 
 func (p *parser) makeTextNode(t *token) (n *Text) {

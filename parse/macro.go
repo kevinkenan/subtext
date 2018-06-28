@@ -8,7 +8,7 @@ import (
 	// "unicode"
 	// "unicode/utf8"
 	"gopkg.in/yaml.v2"
-	// "github.com/kevinkenan/cobra"
+	"github.com/kevinkenan/cobra"
 )
 
 type MacroDef struct {
@@ -31,6 +31,8 @@ type Macro struct {
 	Rd                 string      // Right delim used in the template
 }
 
+type MacroMap map[string]*Macro
+
 type Optional struct {
 	Name    string
 	Default string
@@ -46,6 +48,27 @@ func NewMacro(name, tmplt string, params []string, optionals []*Optional) *Macro
 		Template:     t,
 		Ld:           "{{",
 		Rd:           "}}"}
+}
+
+func NewMacroMap() MacroMap {
+	mm := MacroMap{}
+
+	// Default macros
+	macs := []*Macro{
+		NewMacro("sys.newmacro", "", []string{"def"}, nil),
+		NewMacro("sys.newmacrof", "", []string{"def"}, nil),
+		NewMacro("sys.config", "", []string{"configs"}, nil),
+		NewMacro("sys.configf", "", []string{"configs"}, nil),
+		NewMacro("paragraph.begin", "\n", []string{"orig"}, nil),
+		NewMacro("paragraph.end", "\n", []string{"orig"}, nil),
+	}
+
+	// Add default macros
+	for _, m := range macs {
+		mm[m.Name] = m
+	}
+
+	return mm
 }
 
 func (m *Macro) Parse() {
@@ -118,7 +141,7 @@ func (m *Macro) ValidateArgs(c *Cmd) (NodeMap, error) {
 	// The arguments are valid so add any missing optionals.
 	for _, o := range m.Optionals {
 		if _, found := selected[o.Name]; !found {
-			nl, err := ParsePlain(o.Name, o.Default)
+			nl, _, err := ParsePlain(o.Name, o.Default)
 			if err != nil {
 				return nil, fmt.Errorf("parsing default: %s", err)
 			}
@@ -126,4 +149,63 @@ func (m *Macro) ValidateArgs(c *Cmd) (NodeMap, error) {
 		}
 	}
 	return selected, nil
+}
+
+func (p *parser) addNewMacro(n *Cmd, flowStyle bool) error {
+	name := "sys.newmacro"
+	// Retrieve the sys.newmacro system command
+	d, found := p.macros[name]
+	if !found {
+		return fmt.Errorf("Line %d: system command %q not defined.", n.GetLineNum(), name)
+	}
+	cobra.Tag("cmd").Strunc("macro", d.TemplateText).LogfV("retrieved system command definition")
+
+	args, err := d.ValidateArgs(n)
+	if err != nil {
+		return fmt.Errorf("Line %d: ValidateArgs failed on system command %q: %q", n.GetLineNum(), name, err)
+	}
+
+	cobra.Tag("cmd").Strunc("syscmd", args["def"].String()).LogfV("system command: %s", args["def"])
+	var mdef MacroDef
+
+	if flowStyle {
+		err = yaml.Unmarshal([]byte("{"+args["def"].String()+"}"), &mdef)
+	} else {
+		err = yaml.Unmarshal([]byte(args["def"].String()), &mdef)
+	}
+
+	if err != nil {
+		return fmt.Errorf("Line %d: unmarshall error for system command %q: %q", n.GetLineNum(), name, err)
+	}
+	cobra.Tag("cmd").LogfV("marshalled syscmd: %+v", mdef)
+
+	opts := []*Optional{}
+	for _, opt := range mdef.Optionals {
+		opts = append(opts, NewOptional(opt.Key.(string), opt.Value.(string)))
+	}
+
+	left, right := mdef.Delims[0], mdef.Delims[1]
+
+	if left == "" {
+		left = "(("
+	}
+
+	if right == "" {
+		right = "))"
+	}
+
+	m := &Macro{
+		Name:         mdef.Name,
+		TemplateText: mdef.Template,
+		Parameters:   mdef.Parameters,
+		Optionals:    opts,
+		Block:        mdef.Block,
+		Ld:           left,
+		Rd:           right,
+	}
+
+	m.Parse()
+	p.macros[m.Name] = m
+	cobra.Tag("cmd").LogfV("loaded new macro")
+	return nil
 }

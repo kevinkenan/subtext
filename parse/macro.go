@@ -11,6 +11,15 @@ import (
 	"github.com/kevinkenan/cobra"
 )
 
+type Optional struct {
+	Name    string
+	Default string
+}
+
+func NewOptional(name, dflt string) *Optional {
+	return &Optional{name, dflt}
+}
+
 type MacroDef struct {
 	Name       string        // The macro's name to match command names
 	Template   string        // The Go template that defines the macro
@@ -20,35 +29,7 @@ type MacroDef struct {
 	Delims     [2]string     // Left and right delim used in the template
 }
 
-type Macro struct {
-	Name               string      // The macro's name to match command names
-	TemplateText       string      // The Go template that defines the macro
-	*template.Template             // the parsed template
-	Parameters         []string    // Required parameters
-	Optionals          []*Optional // Optional parameters in correct order
-	Block              bool        // True if macro should be rendered as a block
-	Ld                 string      // Left delim used in the template
-	Rd                 string      // Right delim used in the template
-}
-
 type MacroMap map[string]*Macro
-
-type Optional struct {
-	Name    string
-	Default string
-}
-
-func NewMacro(name, tmplt string, params []string, optionals []*Optional) *Macro {
-	t := template.Must(template.New(name).Option("missingkey=error").Parse(tmplt))
-	return &Macro{
-		Name:         name,
-		Parameters:   params,
-		Optionals:    optionals,
-		TemplateText: tmplt,
-		Template:     t,
-		Ld:           "{{",
-		Rd:           "}}"}
-}
 
 func NewMacroMap() MacroMap {
 	mm := MacroMap{}
@@ -71,13 +52,32 @@ func NewMacroMap() MacroMap {
 	return mm
 }
 
+type Macro struct {
+	Name               string      // The macro's name to match command names
+	TemplateText       string      // The Go template that defines the macro
+	*template.Template             // the parsed template
+	Parameters         []string    // Required parameters
+	Optionals          []*Optional // Optional parameters in correct order
+	Block              bool        // True if macro should be rendered as a block
+	Ld                 string      // Left delim used in the template
+	Rd                 string      // Right delim used in the template
+}
+
+func NewMacro(name, tmplt string, params []string, optionals []*Optional) *Macro {
+	t := template.Must(template.New(name).Option("missingkey=error").Parse(tmplt))
+	return &Macro{
+		Name:         name,
+		Parameters:   params,
+		Optionals:    optionals,
+		TemplateText: tmplt,
+		Template:     t,
+		Ld:           "{{",
+		Rd:           "}}"}
+}
+
 func (m *Macro) Parse() {
 	t := template.Must(template.New(m.Name).Delims(m.Ld, m.Rd).Option("missingkey=error").Parse(m.TemplateText))
 	m.Template = t
-}
-
-func NewOptional(name, dflt string) *Optional {
-	return &Optional{name, dflt}
 }
 
 func (m *Macro) String() string {

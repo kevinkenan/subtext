@@ -2,7 +2,7 @@ package parse
 
 import (
 	"fmt"
-	// "strings"
+	"strings"
 	// "unicode"
 	// "unicode/utf8"
 	"github.com/kevinkenan/cobra"
@@ -57,12 +57,12 @@ func doParse(n string, p *parser) (*Section, MacroMap, error) {
 type parser struct {
 	scanner *scanner //
 	root    *Section // Root node of the tree.
-	// depth    int
 	input  string
 	empty  bool   // true if the buffer is empty.
 	buffer *token // holds the next token if we peek or backup.
-	// cmdDepth int
 	prevNode Node // the previous node
+	inPar      bool
+	inBlockMode bool
 	macros MacroMap
 }
 
@@ -180,16 +180,32 @@ func (p *parser) makeCmd(t *token) (n *Cmd) {
 	// p.cmdDepth += 1
 	cobra.Tag("parse").LogV("creating a cmd node")
 	n = NewCmdNode(p.nextIf(tokenName).value, t)
-	cobra.WithField("name", n.GetCmdName()).LogV("parsing command (cmd)")
+	name := n.GetCmdName()
+
+	if strings.HasPrefix(name, "sys.paragraph") && p.inBlockMode {
+		return
+	}
+
+	m, ok := p.macros[name]
+	if ok {
+		p.inBlockMode = m.Block
+	}
+
+	if p.inPar && p.inBlockMode {
+
+	}
+
+	cobra.WithField("name", name).LogV("parsing command (cmd)")
+
 	switch p.peek().typeof {
 	case tokenLeftSquare:
 		p.parseCmdContext(n)
 	case tokenLeftCurly:
 		p.parseSimpleCmd(n)
 	default:
-		// p.cmdDepth -= 1
 		return
 	}
+
 	return
 }
 

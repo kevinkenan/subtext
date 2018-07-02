@@ -12,16 +12,17 @@ import (
 
 // Document represents the text being processed.
 type Document struct {
-	Name     string
-	Packages []string
-	Output   string
-	Targets  []string
-	Metadata map[string]string
-	Text     string
-	Root     *parse.Section
-	Plain    bool // Don't generate paragraphs or aggressively eat whitespace
-	ReflowPars    bool       // if true, remove new lines and collapse whitespace in paragraphs
-	macrosIn        []*parse.Macro
+	Name       string
+	Packages   []string
+	Output     string
+	Targets    []string
+	Metadata   map[string]string
+	Text       string
+	Root       *parse.Section
+	Options    *parse.Options
+	Plain      bool // Don't generate paragraphs or aggressively eat whitespace
+	ReflowPars bool // if true, remove new lines and collapse whitespace in paragraphs
+	macrosIn   []*parse.Macro
 }
 
 type RenderError struct {
@@ -95,7 +96,7 @@ func (d *Document) AddParagraphMacros() {
 
 func (d *Document) Make() (s string, err error) {
 	r := &Render{Document: d, ParagraphMode: !d.Plain}
-	s, err = MakeWith(d.Text, r, d.macrosIn)
+	s, err = MakeWith(d.Text, r, d.Options)
 	return
 }
 
@@ -103,7 +104,7 @@ func (d *Document) Make() (s string, err error) {
 // context. Most of the time the Document's Make is used (which calls
 // MakeWith), but MakeWith itself is useful for handling macros embedded in
 // templates.
-func MakeWith(t string, r *Render, m []*parse.Macro) (s string, err error) {
+func MakeWith(t string, r *Render, options *parse.Options) (s string, err error) {
 	defer func() { cobra.LogV("finished rendering") }()
 	defer func() {
 		if e := recover(); e != nil {
@@ -116,14 +117,7 @@ func MakeWith(t string, r *Render, m []*parse.Macro) (s string, err error) {
 		}
 	}()
 
-	var root *parse.Section
-	var macros parse.MacroMap
-
-	if r.ParagraphMode {
-		root, macros, err = parse.Parse(r.Name, t, m)
-	} else {
-		root, macros, err = parse.ParsePlain(r.Name, t, m)
-	}
+	root, macros, err := parse.Parse(r.Name, t, options)
 
 	if err != nil {
 		return "", err
@@ -189,7 +183,7 @@ func (r *Render) renderNode(n parse.Node) string {
 			// text = strings.Join(strings.Fields(n.(*parse.Text).GetText()), " ")
 			text = strings.Replace(n.(*parse.Text).GetText(), "\n", " ", -1)
 		} else {
-		 	text = n.(*parse.Text).GetText()
+			text = n.(*parse.Text).GetText()
 		}
 		// text := n.(*parse.Text).GetText()
 		s.WriteString(text)
@@ -403,7 +397,7 @@ func (r *Render) processCmd(n *parse.Cmd) string {
 	cmdLog.Copy().Add("name", name).Add("ld", m.Ld).Logf("executed macro, ready for parsing")
 
 	// Handle commands embedded in the macro.
-	output, _, err := parse.ParsePlain(name, s, nil)
+	output, _, err := parse.ParseMacro(name, s)
 	if err != nil {
 		panic(RenderError{message: fmt.Sprintf("Line %d: error in template for macro %q: %q", n.GetLineNum(), name, err)})
 	} else {

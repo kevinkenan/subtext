@@ -212,6 +212,53 @@ func (sec *Section) Count() (c int) {
 	return
 }
 
+func (nl *Section) WalkS(cs chan string) {
+	c := make(chan Node)
+	go nl.Walk(c)
+	w := new(strings.Builder)
+	for n := range c {
+		switch n.(type) {
+		case *Text:
+			w.WriteString(fmt.Sprintf("Text Node: %q", n.(*Text).NodeValue))
+		case *Section:
+			w.WriteString(fmt.Sprintf("Section Node: contains %d nodes", len(n.(*Section).NodeList)))
+		case *ErrorNode:
+			w.WriteString(fmt.Sprintf("Error: %q", n.(*ErrorNode).NodeValue))
+		case *Cmd:
+			w.WriteString(fmt.Sprintf("Cmd Node: %q\n", n.(*Cmd).NodeValue))
+			w.WriteString(fmt.Sprintf("         Args: %d\n", n.(*Cmd).Count()-1))
+			w.WriteString(fmt.Sprintf("         Flags: <%s>\n", strings.Join(n.(*Cmd).Flags, ",")))
+			// for _, f := range n.(*Cmd).Flags {
+			// 	w.WriteString(fmt.Sprintf("%s,", f))
+			// }
+			// w.WriteString(fmt.Sprintln(">"))
+			w.WriteString(fmt.Sprintf("         Anonymous: %t", n.(*Cmd).Anonymous))
+			if n.(*Cmd).Anonymous {
+				for i, nl := range n.(*Cmd).ArgList {
+					w.WriteString(fmt.Sprintf("\n         Arg %d:", i))
+					for _, nn := range nl {
+						w.WriteString(fmt.Sprintf(" %q", nn))
+					}
+				}
+			} else {
+				if len(n.(*Cmd).ArgMap) > 0 {
+					for k, v := range n.(*Cmd).ArgMap {
+						w.WriteString(fmt.Sprintf("\n         Arg %q: %s", k, v))
+					}
+				} else {
+					w.WriteString(fmt.Sprintln("\n         Args: None"))
+				}
+			}
+		default:
+			w.WriteString(fmt.Sprintf("> UNEXPECTED Node: %q\n", n.String()))
+			w.WriteString(fmt.Sprintf("     Type Code: %d\n", n.Typeof()))
+		}
+		cs <- w.String()
+		w.Reset()
+	}
+	close(cs)
+}
+
 func (nl *Section) Walk(c chan Node) {
 	nl.walk(c)
 	close(c)
@@ -261,10 +308,23 @@ func (t *Text) GetText() string {
 // 	NodeValue
 // }
 
-// func NewParagraphStart(t string) *ParagraphStart {
-// 	cobra.Tag("node").LogV("paragraph start")
-// 	return &ParagraphStart{nParagraphStart, NodeValue(t)}
-// }
+func NewParBeginNode(t *token) *Cmd {
+	cobra.Tag("node").LogV("paragraph begin")
+	return &Cmd{
+		NodeType:  nCmd,
+		NodeValue: NodeValue("paragraph.begin"),
+		cmdToken:  t,
+	}
+}
+
+func NewParEndNode(t *token) *Cmd {
+	cobra.Tag("node").LogV("paragraph end")
+	return &Cmd{
+		NodeType:  nCmd,
+		NodeValue: NodeValue("paragraph.end"),
+		cmdToken:  t,
+	}
+}
 
 // func (p *ParagraphStart) String() string {
 // 	return "•paragraph.begin[]"
@@ -529,17 +589,19 @@ func (n *Cmd) String() string {
 	// Begin the context
 	w.WriteString("[")
 	// Write the flags.
-	w.WriteString("<")
-	w.WriteString(strings.Join(n.Flags, ","))
-	w.WriteString(">")
+	if len(n.Flags) > 0 {
+		w.WriteString("<")
+		w.WriteString(strings.Join(n.Flags, ","))
+		w.WriteString(">")
+	}
 	// Write the Arguments
 	if n.Anonymous {
 		for _, nl := range n.ArgList {
 			w.WriteString(fmt.Sprintf("{%s}", nl.String()))
 		}
-		if len(n.ArgList) == 0 {
-			w.WriteString("{}")
-		}
+		// if len(n.ArgList) == 0 {
+		// 	w.WriteString("{}")
+		// }
 	} else {
 		// Not anonymous. We sort the map to guarantee the order for unit
 		// tests.

@@ -9,37 +9,48 @@ import (
 )
 
 // Parse creates a node tree from the tokens produced by scan.
-func Parse(name, input string, ms []*Macro) (*Section, MacroMap, error) {
-	cobra.Tag("parse").WithField("name", name).LogV("parsing input (parse)")
+func Parse(name, input string, options *Options) (*Section, MacroMap, error) {
+	cobra.Tag("parse").WithField("name", name).Add("plain", options.Plain).LogV("parsing input (parse)")
+
 	p := &parser{
-		scanner: scan(name, input),
+		scanner: scan(name, input, options.Plain),
 		root:    NewSection(),
 		empty:   true,
 		macros:  NewMacroMap(),
+		reflow:  options.Reflow,
 	}
 
-	for _, m := range ms {
+	if options.Plain {
+		p.parMode = false
+		p.parScanOn = false
+		p.parScanFlag = false
+		p.insidePar = false
+	} else {
+		p.parMode = true
+		p.parScanOn = true
+		p.parScanFlag = true
+		p.insidePar = false
+	}
+
+	for _, m := range options.Macros {
 		p.macros[m.Name] = m
 	}
 
 	return doParse(name, p)
 }
 
-// ParsePlain is the same as Parse but uses the scanPlain scanner.
-func ParsePlain(name, input string, ms []*Macro) (*Section, MacroMap, error) {
-	cobra.Tag("parse").WithField("name", name).LogV("parsing in plain mode (parse)")
-	p := &parser{
-		scanner: scanPlain(name, input),
-		root:    NewSection(),
-		empty:   true,
-		macros:  NewMacroMap(),
+// ParseMacro is the same as Parse bu
+func ParseMacro(name, input string) (*Section, MacroMap, error) {
+	options := &Options{
+		Macros: *new(MacroMap),
+		Plain:  true,
 	}
+	return Parse(name, input, options)
+}
 
-	for _, m := range ms {
-		p.macros[m.Name] = m
-	}
-	
-	return doParse(name, p)
+// ParsePlain is the same as Parse but uses the scanPlain scanner.
+func ParsePlain(name, input string, options *Options) (*Section, MacroMap, error) {
+	return Parse(name, input, options)
 }
 
 func doParse(n string, p *parser) (*Section, MacroMap, error) {
@@ -53,17 +64,36 @@ func doParse(n string, p *parser) (*Section, MacroMap, error) {
 // Parser ---------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 
+type Options struct {
+	Macros MacroMap
+	Reflow bool
+	Plain  bool
+}
+
+type pstate struct {
+	sysCmd bool
+}
+
 // parser represents the current state of the parser.
 type parser struct {
-	scanner *scanner //
-	root    *Section // Root node of the tree.
-	input  string
-	empty  bool   // true if the buffer is empty.
-	buffer *token // holds the next token if we peek or backup.
-	prevNode Node // the previous node
-	inPar      bool
-	inBlockMode bool
-	macros MacroMap
+	scanner            *scanner //
+	root               *Section // Root node of the tree.
+	input              string
+	empty              bool   // true if the buffer is empty.
+	buffer             *token // holds the next token if we peek or backup.
+	prevNode           Node   // the previous node
+	macros             MacroMap
+	reflow             bool
+	stateStack         []*pstate
+	insideSysCmd       bool // true when we're processing a syscmd
+	parMode            bool // true when the scanner is invoked with scan instead of scanPlain
+	diableParScanFlags bool // when true, the scanner ignores ¶ commands
+	parScanOn          bool // when true, the scanner generates paragraph commands
+	parScanFlag        bool // set by ¶ command
+	insidePar          bool // true if inside paragraph
+	horizMode          bool // true if cmd exists within a paragraph
+	blockMode          bool // true if we are currently in block mode
+	blockModeChange    bool // true when the block mode has changed
 }
 
 func (p *parser) nextToken() (t *token) {
@@ -124,6 +154,24 @@ func (p *parser) link(n Node) {
 	p.prevNode = n
 }
 
+func (p *parser) isParScanAllowed() bool {
+	return p.parMode && p.parScanFlag
+}
+
+func (p *parser) pushState(s *pstate) {
+	p.stateStack = append(p.stateStack, s)
+}
+
+func (p *parser) popState() *pstate {
+	l := len(p.stateStack)
+	if l == 0 {
+		p.errorf("attempted to read past the end of the parse stack")
+	}
+	s := p.stateStack[l-1]
+	p.stateStack = p.stateStack[:l-1]
+	return s
+}
+
 // Parse token stream ---------------------------------------------------------
 
 func (p *parser) start() (n *Section, macs MacroMap, err error) {
@@ -133,7 +181,46 @@ Loop:
 	for {
 		t := p.next()
 		switch t.typeof {
+		case tokenSpaceEater:
+		spaceEater:
+			for {
+ 				switch p.next().typeof {
+ 				case tokenEmptyLine, tokenIndent, tokenLineBreak, tokenSpaceEater:
+ 					cobra.Tag("parse").LogV("eating space")
+ 					continue
+ 				default:
+ 					p.backup()
+ 					break spaceEater
+ 				}
+			}
+		case tokenEmptyLine:
+			if p.parScanOn {
+				continue
+			}
+			n := p.makeTextNode(t)
+			p.root.append(n)
+			p.link(n)
+		case tokenIndent:
+			if p.reflow {
+				continue
+			} else {
+				n := p.makeTextNode(t)
+				p.root.append(n)
+				p.link(n)
+			}
+		case tokenLineBreak:
+			if p.parScanOn {
+				p.parseParagraph(t)
+			} else {
+				n := p.makeTextNode(t)
+				p.root.append(n)
+				p.link(n)
+			}
 		case tokenText:
+			if p.parScanOn && !p.insidePar {
+				p.insidePar = true
+				p.root.append(NewParBeginNode(t))
+			}
 			n := p.makeTextNode(t)
 			p.root.append(n)
 			p.link(n)
@@ -142,7 +229,9 @@ Loop:
 			p.root.append(n)
 			p.link(n)
 		case tokenSysCmdStart:
-			// ns := p.makeSysCmd(t)
+			cobra.Tag("parse").LogV("begin tokenSysCmdStart")
+			p.insideSysCmd = true
+
 			n := p.makeCmd(t)
 			n.SysCmd = true
 			n.NodeValue = NodeValue(fmt.Sprintf("sys.%s", n.NodeValue))
@@ -156,9 +245,15 @@ Loop:
 				p.root.append(n)
 				p.link(n)
 			}
+
+			p.insideSysCmd = false
+			cobra.Tag("parse").LogV("end tokenSysCmdStart")
 		case tokenError:
 			p.errorf("Line %d: %s", t.lnum, t.value)
 		case tokenEOF:
+			if p.parScanOn && p.insidePar {
+				p.root.append(NewParEndNode(t))
+			}
 			break Loop
 		default:
 			p.errorf("Line %d: unexpected token %q when starting with value %q", t.lnum, tokenTypeLookup(t.typeof), t.value)
@@ -168,6 +263,38 @@ Loop:
 		}
 	}
 	return p.root, p.macros, nil
+}
+
+func (p *parser) parseParagraph(t *token) {
+	pkt := p.peek().typeof
+	lb := false
+
+	switch pkt {
+	case tokenLineBreak, tokenEmptyLine:
+		for n := p.next().typeof; n == tokenLineBreak || n == tokenEmptyLine; n = p.next().typeof {
+			if n == tokenLineBreak {
+				lb = true
+			}
+		}
+		p.backup()
+	}
+
+	if p.insidePar {
+		if lb {
+			p.root.append(NewParEndNode(t))
+			p.insidePar = false
+		} else {
+			if p.reflow {
+				p.root.append(NewTextNode(" "))
+			} else {
+				p.root.append(NewTextNode("\n"))
+			}
+		}
+	}
+
+	if p.reflow {
+		NewTextNode(strings.Replace(t.value, "\n", " ", -1))
+	}
 }
 
 func (p *parser) makeTextNode(t *token) (n *Text) {
@@ -182,18 +309,18 @@ func (p *parser) makeCmd(t *token) (n *Cmd) {
 	n = NewCmdNode(p.nextIf(tokenName).value, t)
 	name := n.GetCmdName()
 
-	if strings.HasPrefix(name, "sys.paragraph") && p.inBlockMode {
-		return
-	}
+	// if strings.HasPrefix(name, "sys.paragraph") && p.inBlockMode {
+	// 	return
+	// }
 
-	m, ok := p.macros[name]
-	if ok {
-		p.inBlockMode = m.Block
-	}
+	// m, ok := p.macros[name]
+	// if ok {
+	// 	p.inBlockMode = m.Block
+	// }
 
-	if p.inPar && p.inBlockMode {
+	// if p.inPar && p.inBlockMode {
 
-	}
+	// }
 
 	cobra.WithField("name", name).LogV("parsing command (cmd)")
 
@@ -295,17 +422,45 @@ func (p *parser) parseTextBlock(m *Cmd) (nl NodeList) {
 	for {
 		t = p.next()
 		switch t.typeof {
+		case tokenEmptyLine:
+			if p.parScanOn && !p.insideSysCmd {
+				continue
+			}
+			n := p.makeTextNode(t)
+			nl = append(nl, n)
+			p.link(n)
+		case tokenIndent:
+			if p.reflow && !p.insideSysCmd {
+				continue
+			} else {
+				n := p.makeTextNode(t)
+				p.root.append(n)
+				p.link(n)
+			}
+		case tokenLineBreak:
+			if p.parScanOn && !p.insideSysCmd {
+				p.parseParagraph(t)
+			} else {
+				n := p.makeTextNode(t)
+				nl = append(nl, n)
+				p.link(n)
+			}
 		case tokenText:
-			n := NewTextNode(t.value)
 			cobra.Tag("parse").LogV("adding textNode to NodeList")
+			if p.parScanOn && !p.insidePar {
+				p.insidePar = true
+				p.root.append(NewParBeginNode(t))
+			}
+			n := NewTextNode(t.value)
 			nl = append(nl, n)
 			p.link(n)
-		case tokenSysCmd:
-			n := p.makeCmd(t)
-			n.SysCmd = true
-			cobra.Tag("parse").LogV("adding sysCmdStart to NodeList")
-			nl = append(nl, n)
-			p.link(n)
+		// case tokenSysCmd:
+		// 	n := p.makeCmd(t)
+		// 	n.SysCmd = true
+		// 	p.insideSysCmd = true
+		// 	cobra.Tag("parse").LogV("adding sysCmdStart to NodeList")
+		// 	nl = append(nl, n)
+		// 	p.link(n)
 		case tokenCmdStart:
 			n := p.makeCmd(t)
 			cobra.Tag("parse").LogV("adding cmdStart to NodeList")

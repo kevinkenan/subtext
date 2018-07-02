@@ -7,8 +7,8 @@ import (
 	"text/template"
 	// "unicode"
 	// "unicode/utf8"
-	"gopkg.in/yaml.v2"
 	"github.com/kevinkenan/cobra"
+	"gopkg.in/yaml.v2"
 )
 
 type Optional struct {
@@ -40,8 +40,10 @@ func NewMacroMap() MacroMap {
 		NewMacro("sys.newmacrof", "", []string{"def"}, nil),
 		NewMacro("sys.config", "", []string{"configs"}, nil),
 		NewMacro("sys.configf", "", []string{"configs"}, nil),
-		NewMacro("paragraph.begin", "\n", []string{"orig"}, nil),
-		NewMacro("paragraph.end", "\n", []string{"orig"}, nil),
+		// NewMacro("paragraph.begin", "\n", []string{"orig"}, nil),
+		// NewMacro("paragraph.end", "\n", []string{"orig"}, nil),
+		NewMacro("paragraph.begin", "|", nil, nil),
+		NewMacro("paragraph.end", "|\n", nil, nil),
 	}
 
 	// Add default macros
@@ -139,9 +141,10 @@ func (m *Macro) ValidateArgs(c *Cmd) (NodeMap, error) {
 			c.GetLineNum(), m.Name, len(unknown), s, unknown)
 	}
 	// The arguments are valid so add any missing optionals.
+	parseOptions := &Options{Plain: true}
 	for _, o := range m.Optionals {
 		if _, found := selected[o.Name]; !found {
-			nl, _, err := ParsePlain(o.Name, o.Default, nil)
+			nl, _, err := Parse(o.Name, o.Default, parseOptions)
 			if err != nil {
 				return nil, fmt.Errorf("parsing default: %s", err)
 			}

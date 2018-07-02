@@ -10,7 +10,7 @@ import (
 	// "bytes"
 	// "strings"
 	// "text/template"
-    // "golang.org/x/net/html"
+	// "golang.org/x/net/html"
 	"github.com/kevinkenan/subtext/parse"
 	// "github.com/kevinkenan/subtext/macros"
 	// "github.com/kevinkenan/subtext/commands"
@@ -159,18 +159,21 @@ func MakeCmd(cmd *cobra.Command, args []string) error {
 	// }
 	d.Output = cobra.GetString("output")
 	d.Packages = cobra.GetStringSlice("packages")
-	d.Plain = cobra.GetBool("plain")
-	d.ReflowPars = cobra.GetBool("reflow")
+	d.Options = &parse.Options{
+		Plain: cobra.GetBool("plain"),
+		Reflow: cobra.GetBool("reflow"),
+		Macros: *new(parse.MacroMap),
+	}
 	d.Text = string(input)
-	d.AddMacro(parse.NewMacro("paragraph.begin", "<p>", []string{"orig"}, nil))
-	d.AddMacro(parse.NewMacro("paragraph.end", "</p>\n\n", []string{"orig"}, nil))
-	d.AddMacro(parse.NewMacro("title", "<h1>{{.text}}</h1>\n\n", []string{"text"}, nil))
-	d.AddMacro(parse.NewMacro("section", "<h2>{{.text}}</h2>\n\n", []string{"text"}, nil))
-	d.AddMacro(parse.NewMacro("emph", "<i>{{.text}}</i>", []string{"text"}, nil))
-	// d.AddMacro(parse.NewMacro("chapter", "<chapter>{{.text}}</chapter>\n", []string{"text"}, nil))
-	d.AddMacro(parse.NewMacro("chapter", "<chapter>\n\n¶+{{.text}}\n\n¶-</chapter>\n", []string{"text"}, nil))
-	d.AddMacro(parse.NewMacro("sys.newmacro", "", []string{"def"}, nil))
-	d.AddMacro(parse.NewMacro("sys.config", "", []string{"configs"}, nil))
+	// macmap := new(parse.MacroMap)
+	// d.AddMacro(parse.NewMacro("paragraph.begin", "<p>", []string{"orig"}, nil))
+	// d.AddMacro(parse.NewMacro("paragraph.end", "</p>\n\n", []string{"orig"}, nil))
+	// d.AddMacro(parse.NewMacro("title", "<h1>{{.text}}</h1>\n\n", []string{"text"}, nil))
+	// d.AddMacro(parse.NewMacro("section", "<h2>{{.text}}</h2>\n\n", []string{"text"}, nil))
+	// d.AddMacro(parse.NewMacro("emph", "<i>{{.text}}</i>", []string{"text"}, nil))
+	// d.AddMacro(parse.NewMacro("chapter", "<chapter>\n\n¶+{{.text}}\n\n¶-</chapter>\n", []string{"text"}, nil))
+	// d.AddMacro(parse.NewMacro("sys.newmacro", "", []string{"def"}, nil))
+	// d.AddMacro(parse.NewMacro("sys.config", "", []string{"configs"}, nil))
 	output, err := d.Make()
 	if err != nil {
 		return err

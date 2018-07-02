@@ -2,7 +2,7 @@ package parse
 
 import (
 	"fmt"
-	// "strings"
+	"strings"
 	// "sort"
 	"testing"
 )
@@ -57,7 +57,8 @@ var selectArgumentsTestCases = []selectArgumentsTestCase{
 }
 
 func testSelectArguments(t *testing.T, test *selectArgumentsTestCase) {
-	root, _, _ := ParsePlain(test.name, test.command, nil)
+	opt := &Options{Plain: true}
+	root, _, _ := ParsePlain(test.name, test.command, opt)
 	if len(root.NodeList) < test.loc-1 {
 		t.Errorf("%s: loc (%d) is beyond the end of root.NodeList", test.name, test.loc)
 		return
@@ -140,61 +141,123 @@ func isSubset(a, b []string) bool {
 // The initial opening paragraph command is skipped in these tests.
 
 type parseTestCase struct {
-	name         string
-	input        string
-	expOut       string
-	expNodeCount int // number of expected nodes.
-	expErr       bool
-	verbose      bool
+	name     string
+	input    string
+	expOut   string
+	expErr   bool
+	expNodes []string
 }
 
 var parseTestCases = []parseTestCase{
-	{"empty", "", "", 1, false, false},
-	{"basic", "test", "test", 2, false, false},
-	{"contains three literals", "test ``, `• and `◊.", "test `, • and ◊.", 5, false, false},
-	{"basic with linebreak", "test\nline two", "test\nline two", 2, false, false},
-	{"bare command", "1 •xyz[] 3", "1 •xyz[<>{}] 3", 4, false, false},
-	{"simple empty command", "1 •2{} 3", "1 •2[<>{}] 3", 4, false, false},
-	{"two anonymous command args", "1 •2[{a}{b}] 3", "1 •2[<>{a}{b}] 3", 6, false, false},
-	{"simple command", "1 •2{3}4", "1 •2[<>{3}]4", 5, false, false},
-	{"flags", "1 •2[<34 \n5=6>]7", "1 •2[<34,5=6>{}]7", 4, false, false},
-	{"anonymous command on different lines", "1 •2[{a}\n{•b{c}}] 4", "1 •2[<>{a}{•b[<>{c}]}] 4", 7, false, false},
-	{"anonymous command with line breaks", "1 •2[{a\nb} {c\nd}] 4", "1 •2[<>{a\nb}{c\nd}] 4", 6, false, false},
-	{"two named args on different lines", "1 •2[x={a}\ny={b}]3", "1 •2[<>x={a}y={b}]3", 6, false, false},
-	{"complex context with named args", "1 •2[1={a}2={b •x{c}}] 4", "1 •2[<>1={a}2={b •x[<>{c}]}] 4", 8, false, false},
-	{"line breaks", "\n\n1\n\n2\n\n3\n", "\n\n1\n\n2\n\n3\n", 2, false, false},
-	{"line breaks with parscan flag on", "¶+\n\n1\n\n2\n\n3\n", "•sys.paragraph.begin[<>{}]1•sys.paragraph.end[<>{\n\n}]•sys.paragraph.begin[<>{}]2•sys.paragraph.end[<>{\n\n}]•sys.paragraph.begin[<>{}]3•sys.paragraph.end[<>{\n}]", 16, false, false},
+	{"empty", "", "", false, []string{}},
+	{"basic", "test", "test", false, []string{"Text Node"}},
+	{"contains three literals", "test ``, `• and `◊.", "test `, • and ◊.", false, []string{
+		"Text Node",
+		"Text Node",
+		"Text Node",
+		"Text Node"}},
+	{"basic with linebreak", "test\nline two", "test\nline two", false, []string{
+		"Text Node",
+		"Text Node",
+		"Text Node"}},
+	{"bare command", "1 •xyz[] 3", "1 •xyz[] 3", false, []string{
+		"Text Node",
+		"Cmd Node",
+		"Text Node"}},
+	{"simple empty command", "1 •2{} 3", "1 •2[{}] 3", false, []string{
+		"Text Node",
+		"Cmd Node",
+		"Text Node"}},
+	{"two anonymous command args", "1 •2[{a}{b}] 3", "1 •2[{a}{b}] 3", false, []string{
+		"Text Node",
+		"Cmd Node",
+		"Text Node"}},
+	{"flags", "1 •2[<34 \n5=6>]7", "1 •2[<34,5=6>]7", false, []string{
+		"Text Node",
+		"Cmd Node",
+		"Text Node"}},
+	{"anonymous command on different lines", "1 •2[{a}\n{•b{c}}] 4", "1 •2[{a}{•b[{c}]}] 4", false, []string{
+		"Text Node",
+		"Cmd Node",
+		"Text Node"}},
+	{"anonymous command with line breaks", "1 •2[{a\nb} {c\nd}] 4", "1 •2[{a\nb}{c\nd}] 4", false, []string{
+		"Text Node",
+		"Cmd Node",
+		"Text Node"}},
+	{"two named args on different lines", "1 •2[x={a}\ny={b}]3", "1 •2[x={a}y={b}]3", false, []string{
+		"Text Node",
+		"Cmd Node",
+		"Text Node"}},
+	{"complex context with named args", "1 •2[1={a}2={b •x{c}}] 4", "1 •2[1={a}2={b •x[{c}]}] 4", false, []string{
+		"Text Node",
+		"Cmd Node",
+		"Text Node"}},
+	{"line breaks", "\n\n1\n\n2\n\n3\n", "\n\n1\n\n2\n\n3\n", false, []string{
+		"Text Node",
+		"Text Node",
+		"Text Node",
+		"Text Node",
+		"Text Node",
+		"Text Node",
+		"Text Node",
+		"Text Node",
+		"Text Node",
+		"Text Node"}},
+	// {"line breaks with parscan flag on", "¶+\n\n1\n\n2\n\n3\n", "•sys.paragraph.begin[<>{}]1•sys.paragraph.end[<>{\n\n}]•sys.paragraph.begin[<>{}]2•sys.paragraph.end[<>{\n\n}]•sys.paragraph.begin[<>{}]3•sys.paragraph.end[<>{\n}]", false, []string{
+	// 	"Text Node",
+	// 	}},
 
 	// SysCmd tests
-	{"SysCmd", "test•(this)now", "test•sys.this[<>{}]now", 4, false, false},
-	{"SysCmd advanced", "test•(this){that}now", "test•sys.this[<>{that}]now", 5, false, false},
-	{"SysCmd with linebreak", "test•(this){\nthat}now", "test•sys.this[<>{\nthat}]now", 5, false, false},
+	{"SysCmd", "test•(this)now", "test•sys.this[]now", false, []string{
+		"Text Node",
+		"Cmd Node",
+		"Text Node"}},
+	{"SysCmd advanced", "test•(this){that}now", "test•sys.this[{that}]now", false, []string{
+		"Text Node",
+		"Cmd Node",
+		"Text Node"}},
+	{"SysCmd with linebreak", "test•(this){\nthat}now", "test•sys.this[{\nthat}]now", false, []string{
+		"Text Node",
+		"Cmd Node",
+		"Text Node"}},
+	{"SysCmd", "test•(this)%  \n now", "test•sys.this[]now", false, []string{
+		"Text Node",
+		"Cmd Node",
+		"Text Node"}},
 
-	// Error tests
-	{"basic kv command", "1•", "", 0, true, false},
+	// // Error tests
+	// {"basic kv command", "1•", "", 0, true, false},
 }
 
 var parParseTestCases = []parseTestCase{
 	// Paragaph tests
 	{"basic paragraph", "one\n\ntwo",
-		"•sys.paragraph.begin[<>{}]" +
-			"one•sys.paragraph.end[<>{\n\n}]" +
-			"•sys.paragraph.begin[<>{}]" +
-			"two" +
-			"•sys.paragraph.end[<>{}]",
-		11, false, false},
+		"•paragraph.begin[]one•paragraph.end[]•paragraph.begin[]two•paragraph.end[]", false, []string{
+			"Cmd Node",
+			"Text Node",
+			"Cmd Node",
+			"Cmd Node",
+			"Text Node",
+			"Cmd Node"}},
 	{"simple command with paragraph", "1•2{A\n\nB}3",
-		"•sys.paragraph.begin[<>{}]1•2[<>{A•sys.paragraph.end[<>{\n\n}]•sys.paragraph.begin[<>{}]B}]3•sys.paragraph.end[<>{}]",
-		14, false, false},
-	{"context command with paragraph", "1•2[<x>{A\n \nB}{\n\nC}]3",
-		"•sys.paragraph.begin[<>{}]1•2[<x>{A•sys.paragraph.end[<>{\n \n}]•sys.paragraph.begin[<>{}]B}{•sys.paragraph.end[<>{\n\n}]•sys.paragraph.begin[<>{}]C}]3•sys.paragraph.end[<>{}]",
-		19, false, false},
-	{"line breaks with parscan flag", "\n\n1¶-\n\n¶+2\n\n3\n",
-		"•sys.paragraph.begin[<>{}]1\n\n2•sys.paragraph.end[<>{\n\n}]•sys.paragraph.begin[<>{}]3•sys.paragraph.end[<>{\n}]",
-		13, false, false},
-	{"line breaks with parscan flag off", "¶-\n\n1\n\n2\n\n3\n", "\n\n1\n\n2\n\n3\n", 2, false, false},
-	{"vertical mode test", "\n\n§a{b}\n\ncde\n",
-		"•a[<>{b}]•sys.paragraph.begin[<>{}]cde•sys.paragraph.end[<>{\n}]", 8, false, false},
+		"•paragraph.begin[]1•2[{A•paragraph.end[]•paragraph.begin[]B}]3•paragraph.end[]", false, []string{
+			"Cmd Node",
+			"Text Node",
+			"Cmd Node",
+			"Text Node",
+			"Cmd Node",
+			"Cmd Node",
+			"Text Node",
+			"Cmd Node"}},
+	// {"context command with paragraph", "1•2[<x>{A\n \nB}{\n\nC}]3",
+	// 	"•sys.paragraph.begin[<>{}]1•2[<x>{A•sys.paragraph.end[<>{\n \n}]•sys.paragraph.begin[<>{}]B}{•sys.paragraph.end[<>{\n\n}]•sys.paragraph.begin[<>{}]C}]3•sys.paragraph.end[<>{}]",
+	// 	19, false, false},
+	// {"line breaks with parscan flag", "\n\n1¶-\n\n¶+2\n\n3\n",
+	// 	"•sys.paragraph.begin[<>{}]1\n\n2•sys.paragraph.end[<>{\n\n}]•sys.paragraph.begin[<>{}]3•sys.paragraph.end[<>{\n}]",
+	// 	13, false, false},
+	// {"line breaks with parscan flag off", "¶-\n\n1\n\n2\n\n3\n", "\n\n1\n\n2\n\n3\n", 2, false, false},
+	// {"vertical mode test", "\n\n§a{b}\n\ncde\n",
+	// 	"•a[<>{b}]•sys.paragraph.begin[<>{}]cde•sys.paragraph.end[<>{\n}]", 8, false, false},
 }
 
 func TestParse(t *testing.T) {
@@ -223,19 +286,13 @@ func testParse(t *testing.T, tests []parseTestCase, plain bool, start, end int) 
 			result *Section
 			err    error
 		)
-		if plain {
-			result, _, err = ParsePlain(test.name, test.input, nil)
-		} else {
-			result, _, err = Parse(test.name, test.input, nil)
-		}
-		if test.verbose {
-			if err == nil {
-				fmt.Printf("Verbose: %v\n", test.name)
-				v(result)
-			} else {
-				fmt.Printf("%s: '%q' -> error: '%q'\n", test.name, test.input, err)
-			}
-		}
+		opts := &Options{Plain: plain}
+		result, _, err = Parse(test.name, test.input, opts)
+		// if err != nil {
+		// 	fmt.Printf("%s: '%q' -> error: '%q'\n", test.name, test.input, err)
+		// }
+		nodes := getNodes(result)
+		eqNodes := nodeListTypeEqual(nodes, test.expNodes)
 		if test.expErr && err == nil {
 			t.Errorf("%s\n  *result: unexpected success", test.name)
 		}
@@ -243,56 +300,49 @@ func testParse(t *testing.T, tests []parseTestCase, plain bool, start, end int) 
 			t.Errorf("%s\n  *result: unexpected error: %s", test.name, err)
 		}
 		if err == nil {
-			nodeCount := result.Count()
 			s := result.NodeList.String()
-			if s != test.expOut || nodeCount != test.expNodeCount {
-				t.Errorf("[%d] %s\n  *result:   %q (%d nodes)\n  *expected: %q (%d nodes)\n", tc, test.name, s, nodeCount, test.expOut, test.expNodeCount)
+			if s != test.expOut {
+				t.Errorf("[%d] %s\n  *result:   %q\n  *expected: %q\n", tc, test.name, s, test.expOut)
+			}
+			if !eqNodes {
+				t.Errorf("[%d] %s\n  *result:   %s\n  *expected: %s", tc, test.name, joinList(nodes), joinList(test.expNodes))
 			}
 		}
 	}
 }
 
-func v(root *Section) {
-	c := make(chan Node)
-	go root.Walk(c)
-	fmt.Printf(":: %s\n", root.String())
-	fmt.Printf("> Root Section Node: contains %d nodes\n", len(root.NodeList))
-	for n := range c {
-		switch n.(type) {
-		case *Text:
-			fmt.Printf("> Text Node: %q\n", n.(*Text).NodeValue)
-		case *Section:
-			fmt.Printf("> Section Node: contains %d nodes\n", len(n.(*Section).NodeList))
-		case *ErrorNode:
-			fmt.Printf("> Error: %q\n", n.(*ErrorNode).NodeValue)
-		case *Cmd:
-			fmt.Printf("> Cmd Node: %q\n", n.(*Cmd).NodeValue)
-			fmt.Printf("     Count: %d nodes\n", n.(*Cmd).Count())
-			fmt.Print("     Flags: <")
-			for _, f := range n.(*Cmd).Flags {
-				fmt.Printf("%s", f)
-			}
-			fmt.Println(">")
-			fmt.Printf("     Anonymous: %t\n", n.(*Cmd).Anonymous)
-			if n.(*Cmd).Anonymous {
-				for i, nl := range n.(*Cmd).ArgList {
-					fmt.Printf("     Text Block %d:\n", i)
-					for _, nn := range nl {
-						fmt.Printf("       %q\n", nn)
-					}
-				}
-			} else {
-				if len(n.(*Cmd).ArgMap) > 0 {
-					for k, v := range n.(*Cmd).ArgMap {
-						fmt.Printf("     Argument %q: %s\n", k, v)
-					}
-				} else {
-					fmt.Println("     Arguments: None")
-				}
-			}
-		default:
-			fmt.Printf("> UNEXPECTED Node: %q\n", n.String())
-			fmt.Printf("     Type Code: %d\n", n.Typeof())
+func joinList(l []string) string {
+	w := new(strings.Builder)
+	for _, s := range l {
+		w.WriteString(fmt.Sprintf("\n      %s", s))
+	}
+	return w.String()
+}
+
+func getNodes(root *Section) []string {
+	nodes := []string{}
+	c := make(chan string)
+	go root.WalkS(c)
+	// fmt.Printf(":: %q\n", root.String())
+	// fmt.Printf("> Root Section Node: contains %d nodes\n", len(root.NodeList))
+	for s := range c {
+		nodes = append(nodes, s)
+	}
+	return nodes
+}
+
+func nodeListTypeEqual(n1, n2 []string) bool {
+	if len(n1) != len(n2) {
+		return false
+	}
+	for k := range n1 {
+		if !nodeTypeEqual(n1[k], n2[k]) {
+			return false
 		}
 	}
+	return true
+}
+
+func nodeTypeEqual(node, ntype string) bool {
+	return strings.HasPrefix(node, ntype+":")
 }

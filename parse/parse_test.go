@@ -59,8 +59,8 @@ var selectArgumentsTestCases = []selectArgumentsTestCase{
 func testSelectArguments(t *testing.T, test *selectArgumentsTestCase) {
 	opt := &Options{Plain: true}
 	opt.Macros = NewMacroMap()
-	opt.Macros["X"] = NewMacro("X", "", nil, nil)
-	opt.Macros["sys.Z"] = NewMacro("sys.Z", "", nil, nil)
+	opt.Macros[MacroType{"X", ""}] = NewMacro("X", "", nil, nil)
+	opt.Macros[MacroType{"sys.Z", ""}] = NewMacro("sys.Z", "", nil, nil)
 
 	root, _, err := Parse(test.name, test.command, opt)
 
@@ -358,8 +358,8 @@ func TestFlowParse(t *testing.T) {
 
 func testParse(t *testing.T, tests []parseTestCase, opts *Options, start, end int) {
 	opts.Macros = NewMacroMap()
-	opts.Macros["X"] = NewMacro("X", "", nil, nil)
-	opts.Macros["sys.Z"] = NewMacro("sys.Z", "", nil, nil)
+	opts.Macros[MacroType{"X", ""}] = NewMacro("X", "", nil, nil)
+	opts.Macros[MacroType{"sys.Z", ""}] = NewMacro("sys.Z", "", nil, nil)
 	for tc, test := range tests[start:end] {
 		var (
 			result *Section

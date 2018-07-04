@@ -33,7 +33,7 @@ func Parse(name, input string, options *Options) (*Section, MacroMap, error) {
 	}
 
 	for _, m := range options.Macros {
-		p.macros[m.Name] = m
+		p.macros[MacroType{m.Name, m.Format}] = m
 	}
 
 	return doParse(name, p)
@@ -59,6 +59,7 @@ type Options struct {
 	Macros MacroMap
 	Reflow bool
 	Plain  bool
+	Format string
 }
 
 type pstate struct {
@@ -76,6 +77,7 @@ type parser struct {
 	prevNode           Node   // the previous node
 	macros             MacroMap
 	reflow             bool
+	format             string // the document's format
 	stateStack         []*pstate
 	cmdDepth           int
 	insideSysCmd       bool // true when we're processing a syscmd
@@ -96,8 +98,8 @@ func (p *parser) nextToken() (t *token) {
 func (p *parser) next() (t *token) {
 	if p.empty {
 		tt := p.scanner.nextToken()
-		t = &tt      // not sure about why can't take the address of
-		p.buffer = t // for backup()
+		t = &tt
+		p.buffer = t 
 	} else {
 		t = p.buffer
 		p.empty = true
@@ -433,8 +435,8 @@ func (p *parser) makeCmd(t *token) (n *Cmd, err error) {
 	name := n.GetCmdName()
 	cobra.WithField("name", name).LogV("parsing command (cmd)")
 
-	mac, found := p.macros[name]
-	if !found {
+	mac := p.macros.GetMacro(name, p.format)
+	if mac == nil {
 		err = fmt.Errorf("Line %d: command %q not defined.", n.GetLineNum(), name)
 		return nil, err
 	}

@@ -250,8 +250,8 @@ func (r *Render) processSysCmd(n *parse.Cmd) string {
 func (r *Render) handleSysConfigCmd(n *parse.Cmd, flowStyle bool) {
 	name := "sys.config"
 	// Retrieve the sys.newmacro system command
-	d, found := r.macros[name]
-	if !found {
+	d := r.macros.GetMacro(name, r.Options.Format)
+	if d == nil {
 		panic(RenderError{message: fmt.Sprintf("Line %d: system command %q not defined.", n.GetLineNum(), name)})
 	}
 	cobra.Tag("cmd").Strunc("macro", d.TemplateText).LogfV("retrieved system command definition")
@@ -309,8 +309,8 @@ func (r *Render) processCmd(n *parse.Cmd) string {
 	// }
 
 	// Get the macro definition.
-	m, found := r.macros[name]
-	if !found {
+	m := r.macros.GetMacro(name, r.Options.Format)
+	if m == nil {
 		panic(RenderError{message: fmt.Sprintf("Line %d: macro %q not defined.", n.GetLineNum(), name)})
 	}
 	cmdLog.Copy().Strunc("macro", m.TemplateText).LogfV("retrieved macro definition")

@@ -96,8 +96,8 @@ func newArgsCheckTestCase(m *Macro, n string, cmd string, loc int, exp string, e
 func testValidateArgs(t *testing.T, test *argsCheckTestCase) {
 	opt := &Options{Plain: true}
 	opt.Macros = NewMacroMap()
-	opt.Macros["testCmd"] = NewMacro("testCmd", "", nil, nil)
-	opt.Macros["sys.Z"] = NewMacro("sys.Z", "", nil, nil)
+	opt.Macros[MacroType{"testCmd", ""}] = NewMacro("testCmd", "", nil, nil)
+	opt.Macros[MacroType{"sys.Z", ""}] = NewMacro("sys.Z", "", nil, nil)
 	root, _, err := Parse(test.name, test.command, opt)
 
 	if err != nil {

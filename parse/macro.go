@@ -34,7 +34,7 @@ type MacroType struct {
 	Name, Format string
 }
 
-type MacroMap map[string]*Macro
+type MacroMap map[MacroType]*Macro
 
 func NewMacroMap() MacroMap {
 	mm := MacroMap{}
@@ -54,12 +54,33 @@ func NewMacroMap() MacroMap {
 		NewMacro("paragraph.end", ">\n", nil, nil),
 	}
 
+	mt := MacroType{Name: "", Format: ""}
+
 	// Add default macros
 	for _, m := range macs {
-		mm[m.Name] = m
+		mt.Name = m.Name
+		mm[mt] = m
 	}
 
 	return mm
+}
+
+func (m MacroMap) GetMacro(name, format string) *Macro {
+	mt := MacroType{name, format}
+	mac, found := m[mt]
+
+	if found {
+		return mac
+	}
+
+	mt.Format = ""
+	mac, found = m[mt]
+
+	if found {
+		return mac
+	}
+
+	return nil
 }
 
 type Macro struct {
@@ -180,8 +201,8 @@ func (m *Macro) ValidateArgs(c *Cmd) (NodeMap, error) {
 func (p *parser) addNewMacro(n *Cmd, flowStyle bool) error {
 	name := "sys.newmacro"
 	// Retrieve the sys.newmacro system command
-	d, found := p.macros[name]
-	if !found {
+	d := p.macros.GetMacro(name, p.format)
+	if d == nil {
 		return fmt.Errorf("Line %d: system command %q not defined.", n.GetLineNum(), name)
 	}
 	cobra.Tag("cmd").Strunc("macro", d.TemplateText).LogfV("retrieved system command definition")
@@ -225,13 +246,15 @@ func (p *parser) addNewMacro(n *Cmd, flowStyle bool) error {
 		TemplateText: mdef.Template,
 		Parameters:   mdef.Parameters,
 		Optionals:    opts,
+		Format:       mdef.Format,
 		Block:        mdef.Block,
 		Ld:           left,
 		Rd:           right,
 	}
 
 	m.Parse()
-	p.macros[m.Name] = m
+	mt := MacroType{m.Name, m.Format}
+	p.macros[mt] = m
 	cobra.Tag("cmd").LogfV("loaded new macro")
 	return nil
 }

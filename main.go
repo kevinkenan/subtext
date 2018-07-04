@@ -162,6 +162,7 @@ func MakeCmd(cmd *cobra.Command, args []string) error {
 	d.Options = &parse.Options{
 		Plain:  cobra.GetBool("plain"),
 		Reflow: cobra.GetBool("reflow"),
+		Format: cobra.GetString("format"),
 		Macros: *new(parse.MacroMap),
 	}
 	d.Text = string(input)
@@ -304,6 +305,7 @@ func init() {
 		cobra.NewStringFlag("output", cobra.Opts().Abbr("o").Default("-").Desc("filesystem path of the output file")),
 		cobra.NewBoolFlag("plain", cobra.Opts().Default(false).Desc("process the text in plain mode")),
 		cobra.NewBoolFlag("reflow", cobra.Opts().Default(false).Desc("reflow paragraphs")),
+		cobra.NewStringFlag("format", cobra.Opts().Desc("the output format")),
 		cobra.NewStringSliceFlag("packages", cobra.Opts().Abbr("p").Desc("macro package(s) to apply to input")))
 
 	walk := cobra.NewCommand("walk")

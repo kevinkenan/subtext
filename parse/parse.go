@@ -498,29 +498,6 @@ func (p *parser) assembleText() NodeList {
 	}
 }
 
-// func (p *parser) parseSysCmd(m *Cmd) {
-// 	cobra.Tag("parse").LogV("parsing syscmd")
-// 	m.ArgList = []NodeList{p.parseTextBlock(m)}
-// 	return
-// }
-
-// func (p *parser) parseSysCmd(m *Cmd) {
-// 	cobra.Tag("parse").LogV("parsing syscmd")
-// 	p.next()
-// 	// m.ArgList = []NodeList{p.parseTextBlock(m)}
-// 	p.cmdDepth += 1
-// 	for {
-// 		t := p.next()
-// 		switch t.typeof {
-// 		case tokenRightCurly:
-
-// 		}
-// 	}
-// 	p.cmdDepth -= 1
-// 	m.ArgList = []NodeList{nl}
-// 	return
-// }
-
 func (p *parser) parseCmdContext(m *Cmd) {
 	cobra.Tag("parse").LogV("parsing cmd context")
 	t := p.nextIf(tokenLeftSquare)
@@ -551,13 +528,6 @@ func (p *parser) parseCmdContext(m *Cmd) {
 	p.nextIf(tokenRightSquare)
 	p.cmdDepth -= 1
 
-	// t = p.next()
-	// switch t.typeof {
-	// case tokenRightSquare:
-	// 	return
-	// default:
-	// 	p.errorf("unexpected %q in a command context on line %d", t.value, t.lnum)
-	// }
 	return
 }
 

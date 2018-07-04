@@ -30,6 +30,10 @@ type MacroDef struct {
 	Delims     [2]string     // Left and right delim used in the template
 }
 
+type MacroType struct {
+	Name, Format string
+}
+
 type MacroMap map[string]*Macro
 
 func NewMacroMap() MacroMap {

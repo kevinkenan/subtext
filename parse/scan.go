@@ -523,20 +523,10 @@ func scanStart(s *scanner) ƒ {
 
 func scanText(s *scanner) ƒ {
 	cobra.Tag("scan").LogV("scanText")
-	// s.emitEmptyLine()
-	// if s.isParScanOn() && !s.isInsidePar() {
-	// 	s.eatSpaces()
-	// }
 Loop:
 	for {
 		switch r := s.next(); {
 		case isAlphaNumeric(r), isHSpace(r):
-			// if s.isParScanOn() && !s.isInsidePar() {
-			// 	s.backup()
-			// 	cobra.Tag("scan").WithField("length", len(s.input[s.start:s.pos])).Add("line", s.line).LogfV("alphanumeric buffer")
-			// 	s.insertParagraphBeginCmd()
-			// 	s.next()
-			// }
 		case r == '\r':
 			pk := s.peek()
 			if pk == '\n' {
@@ -560,19 +550,6 @@ Loop:
 					s.emit(tokenIndent)
 				}
 			}
-			// mark := s.pos - 1
-			// s.acceptRun(" \t") // accept horizontal white space
-			// pk := s.peek()
-			// if s.isParScanOn() && (isEndOfLine(pk) || isEndOfFile(pk)) {
-			// 	if s.isInsidePar() {
-			// 		s.pos = mark // reset the stream back to the beginning of the par break
-			// 		s.emit(tokenText)
-			// 		s.acceptRun(spaceChars)
-			// 		s.insertParagraphEndCmd() // par end cmd will contain all the white space
-			// 	} else {
-			// 		s.eatSpaces()
-			// 	}
-			// }
 		case r == '¶':
 			s.backup()
 			s.emit(tokenText)
@@ -581,22 +558,9 @@ Loop:
 			case nxt == '+':
 				cobra.Tag("scan").Add("line", s.line).LogV("encountered ¶+")
 				s.emit(tokenParScanOn)
-				// s.ignore()
-				// if !s.isParScanFlagDisabled() {
-				// 	cobra.Tag("scan").LogV("turning paragraph scan on")
-				// 	s.setParScanFlag(true)
-				// 	s.setParScanOn()
-				// 	return scanText
-				// }
 			case nxt == '-':
 				cobra.Tag("scan").Add("line", s.line).LogV("encountered ¶-")
 				s.emit(tokenParScanOff)
-				// s.ignore()
-				// if !s.isParScanFlagDisabled() {
-				// 	cobra.Tag("scan").LogV("turning paragraph scan off")
-				// 	s.setParScanFlag(false)
-				// 	s.setParScanOff()
-				// }
 			default:
 				s.errorf("character %q not a valid character to follow ¶", nxt)
 			}
@@ -658,47 +622,10 @@ Loop:
 		s.emit(tokenText)
 	}
 
-	// if s.isInsidePar() {
-	// 	s.insertParagraphEndCmd()
-	// }
-
 	s.emit(tokenEOF)
 	cobra.Tag("scan").WithField("name", s.name).Add("line", s.line).LogV("completed scan")
 	return nil
 }
-
-// func (s *scanner) insertParagraphBeginCmd() {
-// 	if s.isInsidePar() || s.isParScanOff() {
-// 		cobra.Tag("scan").LogV("aborting insertParagraphBeginCmd")
-// 		return
-// 	}
-// 	cobra.Tag("scan").LogV("insertParagraphBeginCmd")
-// 	s.setInsidePar(true)
-// 	s.emitInsertedToken(tokenCmdStart, "")
-// 	s.emitInsertedToken(tokenName, "sys.paragraph.begin")
-// 	s.emitInsertedToken(tokenLeftSquare, "[")
-// 	s.emitInsertedToken(tokenLeftCurly, "{")
-// 	s.emitRawToken(tokenText)
-// 	s.emitInsertedToken(tokenRightCurly, "}")
-// 	s.emitInsertedToken(tokenRightSquare, "]")
-// }
-
-// func (s *scanner) insertParagraphEndCmd() {
-// 	if !s.isInsidePar() || s.isParScanOff() {
-// 		cobra.Tag("scan").LogV("aborting insertParagraphEndCmd")
-// 		return
-// 	}
-// 	cobra.Tag("scan").LogV("insertParagraphEndCmd")
-// 	s.setInsidePar(false)
-// 	s.emitInsertedToken(tokenCmdStart, "")
-// 	s.emitInsertedToken(tokenName, "sys.paragraph.end")
-// 	s.emitInsertedToken(tokenLeftSquare, "[")
-// 	s.emitInsertedToken(tokenLeftCurly, "{")
-// 	// s.next()
-// 	s.emitRawToken(tokenText)
-// 	s.emitInsertedToken(tokenRightCurly, "}")
-// 	s.emitInsertedToken(tokenRightSquare, "]")
-// }
 
 // Scans for ◊ characters which toggles comments.
 func scanCommentToggle(s *scanner) {
@@ -732,20 +659,6 @@ func scanNewCommand(s *scanner) ƒ {
 	switch r := s.peek(); {
 	case isAlphaNumeric(r):
 		cobra.Tag("scan").WithField("mode", s.getCmdMode()).LogV("macro command")
-
-		// switch {
-		// case s.isHorizCmd() && !s.blockMode:
-		// 	// If we're not in a paragraph, this will start one for us.
-		// 	s.insertParagraphBeginCmd()
-		// case !s.isHorizCmd() && !s.blockMode:
-		// 	s.blockMode = true
-		// 	s.blockModeChange = true
-		// 	s.emit(tokenText)
-		// 	s.insertParagraphEndCmd()
-		// 	s.setParScanOff()
-		// }
-
-		// s.setParScanOff()
 		s.emitInsertedToken(tokenCmdStart, s.getCmdMode())
 		scanName(s)
 
@@ -760,22 +673,7 @@ func scanNewCommand(s *scanner) ƒ {
 			return scanStart
 		}
 
-		// if s.peek() == '%' {
-		// 	s.next()
-		// 	s.ignore()
-		// 	s.eatSpaces()
-		// }
-
-		// if s.blockMode {
-		// 	s.blockMode = false
-		// 	s.blockModeChange = false
-		// }
-
 		cobra.Tag("scan").LogV("done scanning bare command")
-		// if s.cmdDepth < 1 && s.isParScanAllowed() && s.isParScanOff() {
-		// 	s.setParScanOn()
-		// }
-
 		return scanText
 	case r == '(':
 		cobra.Tag("scan").LogV("system command")
@@ -811,12 +709,6 @@ func scanNewCommand(s *scanner) ƒ {
 			s.emit(tokenSpaceEater)
 			return scanStart
 		}
-
-		// if s.peek() == '%' {
-		// 	s.next()
-		// 	s.ignore()
-		// 	s.eatSpaces()
-		// }
 
 		cobra.Tag("scan").LogV("done scanning bare system command")
 		return scanText
@@ -897,19 +789,7 @@ func scanFullCmd(s *scanner) ƒ {
 				s.next()
 				s.emit(tokenSpaceEater)
 				return scanStart
-				// s.ignore()
-				// s.eatSpaces()
 			}
-
-			// if s.blockMode {
-			// 	s.blockMode = false
-			// 	s.blockModeChange = false
-			// }
-
-			// if s.cmdDepth < 1 && s.isParScanAllowed() && s.isParScanOff() {
-			// 	s.setParScanOn()
-			// 	return scanText
-			// }
 
 			return scanText
 		case r == '{':
@@ -982,68 +862,6 @@ func scanName(s *scanner) string {
 	}
 }
 
-// // scanSysCmd creates a  sysCmd token.
-// func scanSysCmd(s *scanner) ƒ {
-// 	// cobra.Tag("scan").LogV("system command")
-// 	s.next()
-// 	s.emit(tokenLeftParenthesis)
-// 	for run := true; run; {
-// 		switch r := s.peek(); {
-// 		case isAlphaNumeric(r) || r == '_' || r == '.' || r == '-' || r == '=':
-// 			s.next()
-// 		case r == ')':
-// 			cobra.Tag("scan").Strunc("name", s.input[s.start:s.pos]).Add("line", s.line).LogV("system command")
-
-// 			if s.pos > s.start {
-// 				s.emit(tokenSysCmd)
-// 			}
-
-// 			s.emit(tokenRightParenthesis)
-
-// 			s.next()
-// 			pk := s.peek()
-// 			if pk == '{' {
-// 				// input: •(cmd){...}
-// 				// s.pos:       ^
-// 				for {
-// 					switch r := s.next(); {
-// 					case r == '{':
-// 						s.emit(tokenLeftCurly)
-// 						return s.enterTextBlock(syscmd)
-// 					case r == '}':
-// 						s.emit(tokenRightCurly)
-// 						return s.exitTextBlock()
-// 					case isEndOfFile(r):
-// 						s.errorf("end of file while processing command")
-// 					default:
-// 						s.errorf("invalid character '%q' in command", r)
-// 					}
-// 				}
-// 			}
-
-// 			run = false
-// 		case r == ',':
-// 			if s.pos > s.start {
-// 				s.emit(tokenSysCmd)
-// 			}
-
-// 			s.next()
-// 			s.emit(tokenComma)
-// 		case isHSpace(r), isEndOfLine(r):
-// 			if s.pos > s.start {
-// 				s.emit(tokenSysCmd)
-// 			}
-
-// 			s.eatSpaces()
-// 		case isEndOfFile(r):
-// 			s.errorf("end of file in sysCmd call")
-// 		default:
-// 			s.errorf("invalid character %q in sysCmd", r)
-// 		}
-// 	}
-// 	return scanText
-// }
-
 // scanRunes creates a token of arbitrary runes.
 func scanRunes(s *scanner) {
 	for {
@@ -1069,10 +887,6 @@ func scanEolComment(s *scanner) ƒ {
 	}
 
 	s.jump(len("|") + eol)
-
-	// if s.isParScanOn() {
-	// 	s.eatSpaces()
-	// }
 
 	return scanText
 }
@@ -1112,41 +926,15 @@ func (s *scanner) exitTextBlock() (f ƒ) {
 	s.blockModeChange = c.blockModeChange
 
 	if c.extended {
-		// if s.blockModeChange {
-		// 	s.blockMode = false
-		// 	s.blockModeChange = false
-		// }
-
-		// if !s.isHorizCmd() {
-		// 	s.setParScanOff()
-		// }
-
 		f = scanFullCmd
 	} else { // short command
-		// if s.blockModeChange {
-		// 	s.blockMode = false
-		// 	s.blockModeChange = false
-		// }
-
-		// if !s.blockMode && s.isParScanAllowed() {
-		// 	s.setParScanOn()
-		// } else {
-		// 	s.setParScanOff()
-		// }
-
 		s.cmdDepth -= 1
-		// if s.cmdDepth < 1 && s.isParScanAllowed() && s.isParScanOff() {
-		// 	s.setParScanOn()
-		// }
-
 		cobra.Tag("scan").Tag("scan").LogV("done scanning short command")
 
 		if s.peek() == '%' {
 			s.next()
 			s.emit(tokenSpaceEater)
 			f = scanStart
-			// s.ignore()
-			// s.eatSpaces()
 		} else {
 			f = scanText
 		}

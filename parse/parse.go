@@ -39,15 +39,6 @@ func Parse(name, input string, options *Options) (*Section, MacroMap, error) {
 	return doParse(name, p)
 }
 
-// ParseMacro is the same as Parse bu
-func ParseMacro(name, input string) (*Section, MacroMap, error) {
-	options := &Options{
-		Macros: *new(MacroMap),
-		Plain:  true,
-	}
-	return Parse(name, input, options)
-}
-
 // ParsePlain is the same as Parse but uses the scanPlain scanner.
 func ParsePlain(name, input string, options *Options) (*Section, MacroMap, error) {
 	return Parse(name, input, options)
@@ -71,7 +62,8 @@ type Options struct {
 }
 
 type pstate struct {
-	sysCmd bool
+	sysCmd    bool
+	simpleCmd bool
 }
 
 // parser represents the current state of the parser.
@@ -85,6 +77,7 @@ type parser struct {
 	macros             MacroMap
 	reflow             bool
 	stateStack         []*pstate
+	cmdDepth           int
 	insideSysCmd       bool // true when we're processing a syscmd
 	parMode            bool // true when the scanner is invoked with scan instead of scanPlain
 	diableParScanFlags bool // when true, the scanner ignores ¶ commands
@@ -172,69 +165,125 @@ func (p *parser) popState() *pstate {
 	return s
 }
 
+func appendNode(nl NodeList, ns ...Node) NodeList {
+	for _, n := range ns {
+		nl = append(nl, n)
+	}
+	return nl
+}
+
 // Parse token stream ---------------------------------------------------------
 
 func (p *parser) start() (n *Section, macs MacroMap, err error) {
 	defer p.recover(&err)
-	cobra.Tag("parse").LogV("parse root level nodes")
-Loop:
+	cobra.Tag("parse").LogV("parse start")
+	for {
+		nl, done, err := p.parseText()
+		if err != nil {
+			return nil, nil, err
+		}
+		p.root.append(nl)
+		if done {
+			break
+		}
+	}
+	return p.root, p.macros, nil
+}
+
+func (p *parser) parseText() (nl NodeList, done bool, err error) {
+	cobra.Tag("parse").Add("cmdDepth", p.cmdDepth).LogV("parseText")
+	nl = NodeList{}
+	done = false
 	for {
 		t := p.next()
 		switch t.typeof {
 		case tokenSpaceEater:
+			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("begin")
 		spaceEater:
 			for {
- 				switch p.next().typeof {
- 				case tokenEmptyLine, tokenIndent, tokenLineBreak, tokenSpaceEater:
- 					cobra.Tag("parse").LogV("eating space")
- 					continue
- 				default:
- 					p.backup()
- 					break spaceEater
- 				}
+				switch p.next().typeof {
+				case tokenEmptyLine, tokenIndent, tokenLineBreak, tokenSpaceEater:
+					cobra.Tag("parse").LogV("eating space")
+					continue
+				default:
+					p.backup()
+					break spaceEater
+				}
 			}
+			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("end")
 		case tokenEmptyLine:
-			if p.parScanOn {
-				continue
+			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("begin")
+			if !p.parScanOn {
+				n, _ := p.makeTextNode(t)
+				// p.root.append(n)
+				nl = appendNode(nl, n)
+				p.link(n)
 			}
-			n := p.makeTextNode(t)
-			p.root.append(n)
-			p.link(n)
+			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("end")
 		case tokenIndent:
-			if p.reflow {
-				continue
-			} else {
-				n := p.makeTextNode(t)
-				p.root.append(n)
+			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("begin")
+			if !p.reflow {
+				n, _ := p.makeTextNode(t)
+				// p.root.append(n)
+				nl = appendNode(nl, n)
 				p.link(n)
 			}
+			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("end")
 		case tokenLineBreak:
+			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("begin")
 			if p.parScanOn {
-				p.parseParagraph(t)
+				pn := p.parseParagraph(t)
+				nl = appendNode(nl, pn...)
 			} else {
-				n := p.makeTextNode(t)
-				p.root.append(n)
+				n, _ := p.makeTextNode(t)
+				nl = appendNode(nl, n)
 				p.link(n)
 			}
+			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("end")
 		case tokenText:
-			if p.parScanOn && !p.insidePar {
+			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("begin")
+			n, l := p.makeTextNode(t)
+			if p.parScanOn && !p.insidePar && l > 0 {
 				p.insidePar = true
-				p.root.append(NewParBeginNode(t))
+				nl = appendNode(nl, NewParBeginNode(nil))
+				// fmt.Println(nl)
 			}
-			n := p.makeTextNode(t)
-			p.root.append(n)
+			nl = appendNode(nl, n)
 			p.link(n)
+			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("end")
 		case tokenCmdStart:
-			n := p.makeCmd(t)
-			p.root.append(n)
+			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("begin")
+			n, err := p.makeCmd(t)
+			if err != nil {
+				return nil, true, err
+			}
+
+			if p.parScanOn && !p.insidePar && !n.Block {
+				p.insidePar = true
+				nl = appendNode(nl, NewParBeginNode(t))
+			} else if p.parScanOn && p.insidePar && n.Block {
+				p.insidePar = false
+				nl = appendNode(nl, NewParEndNode(t))
+			}
+
+			p.parseCmd(n)
+			nl = appendNode(nl, n)
+
+			if n.Block && p.parScanOn {
+				p.blockSpaceEater()
+			}
+
 			p.link(n)
+			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("end")
 		case tokenSysCmdStart:
-			cobra.Tag("parse").LogV("begin tokenSysCmdStart")
+			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("begin")
 			p.insideSysCmd = true
 
-			n := p.makeCmd(t)
-			n.SysCmd = true
-			n.NodeValue = NodeValue(fmt.Sprintf("sys.%s", n.NodeValue))
+			n, err := p.makeCmd(t)
+			if err != nil {
+				return nil, true, err
+			}
+			p.parseCmd(n)
 
 			switch n.GetCmdName() {
 			case "sys.newmacrof":
@@ -242,119 +291,250 @@ Loop:
 			case "sys.newmacro":
 				err = p.addNewMacro(n, false)
 			default:
-				p.root.append(n)
+				// n.NodeValue = NodeValue(fmt.Sprintf("sys.%s", n.NodeValue))
+				// p.root.append(n)
+				nl = append(nl, n)
 				p.link(n)
 			}
 
 			p.insideSysCmd = false
-			cobra.Tag("parse").LogV("end tokenSysCmdStart")
-		case tokenError:
-			p.errorf("Line %d: %s", t.lnum, t.value)
-		case tokenEOF:
-			if p.parScanOn && p.insidePar {
-				p.root.append(NewParEndNode(t))
+			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("end")
+		case tokenRightCurly:
+			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("begin")
+			if p.cmdDepth > 0 {
+				cobra.Tag("parse").LogV("finished cmd text block")
+				p.backup()
+				cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("end")
+				return
 			}
-			break Loop
+		case tokenRightSquare:
+			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("begin")
+			if p.cmdDepth > 0 {
+				cobra.Tag("parse").LogV("finished full command text block")
+				p.backup()
+				return
+			}
+			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("end")
+		case tokenError:
+			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("begin")
+			p.errorf("Line %d: %s", t.lnum, t.value)
+			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("end")
+		case tokenEOF:
+			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("begin")
+			if p.parScanOn && p.insidePar {
+				// p.root.append(NewParEndNode(t))
+				nl = append(nl, NewParEndNode(t))
+			}
+			done = true
+			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("end")
+			return
 		default:
 			p.errorf("Line %d: unexpected token %q when starting with value %q", t.lnum, tokenTypeLookup(t.typeof), t.value)
 		}
-		if err != nil {
-			return nil, nil, err
-		}
 	}
-	return p.root, p.macros, nil
+	cobra.Tag("parse").LogV("This should be impossilbe")
+	return
 }
 
-func (p *parser) parseParagraph(t *token) {
-	pkt := p.peek().typeof
+func (p *parser) blockSpaceEater() {
+loop:
+	for {
+		nxt := p.next()
+		cobra.Tag("parse").Strunc("text", nxt.value).LogV("post block text")
+		switch nxt.typeof {
+		case tokenEmptyLine, tokenIndent, tokenLineBreak, tokenSpaceEater:
+			cobra.Tag("parse").LogV("eating space")
+			continue
+		case tokenText:
+			if len(strings.TrimSpace(nxt.value)) == 0 {
+				continue
+			}
+			fallthrough
+		default:
+			p.backup()
+			break loop
+		}
+	}
+}
+
+func (p *parser) parseParagraph(t *token) (nl NodeList) {
+	nl = NodeList{}
+	// pkt := p.peek().typeof
 	lb := false
 
-	switch pkt {
-	case tokenLineBreak, tokenEmptyLine:
-		for n := p.next().typeof; n == tokenLineBreak || n == tokenEmptyLine; n = p.next().typeof {
+	// Eat empty space
+loop:
+	for {
+		switch p.peek().typeof {
+		case tokenLineBreak, tokenEmptyLine:
+			n := p.next().typeof
 			if n == tokenLineBreak {
 				lb = true
+				break loop
+				// c = false
 			}
+		case tokenEOF:
+			lb = true
+			break loop
+			// c = false
+		default:
+			break loop
 		}
-		p.backup()
 	}
 
 	if p.insidePar {
 		if lb {
-			p.root.append(NewParEndNode(t))
+			// p.root.append(NewParEndNode(t))
+			cobra.Tag("parse").LogV("adding paragraph.end")
+			nl = append(nl, NewParEndNode(t))
 			p.insidePar = false
 		} else {
 			if p.reflow {
-				p.root.append(NewTextNode(" "))
+				// p.root.append(NewTextNode(" "))
+				cobra.Tag("parse").LogV("adding reflow text node")
+				nl = append(nl, NewTextNode(" "))
 			} else {
-				p.root.append(NewTextNode("\n"))
+				// p.root.append(NewTextNode("\n"))
+				cobra.Tag("parse").LogV("adding text node")
+				nl = append(nl, NewTextNode("\n"))
 			}
 		}
 	}
 
 	if p.reflow {
-		NewTextNode(strings.Replace(t.value, "\n", " ", -1))
+		// NewTextNode(strings.Replace(t.value, "\n", " ", -1))
 	}
-}
 
-func (p *parser) makeTextNode(t *token) (n *Text) {
-	cobra.Tag("parse").LogV("creating a text node")
-	n = NewTextNode(t.value)
 	return
 }
 
-func (p *parser) makeCmd(t *token) (n *Cmd) {
+func (p *parser) makeTextNode(t *token) (*Text, int) {
+	l := len(t.value)
+	s := t.value
+	cobra.Tag("parse").LogV("creating a text node")
+	if p.reflow {
+		s = strings.TrimRight(s, " \t")
+		switch p.peek().typeof {
+		case tokenLineBreak, tokenEOF, tokenRightCurly, tokenRightSquare:
+		default:
+			if len(s) < l {
+				s = s + " "
+			}
+		}
+	}
+	n := NewTextNode(s)
+	return n, len(s)
+}
+
+func (p *parser) makeCmd(t *token) (n *Cmd, err error) {
 	// p.cmdDepth += 1
 	cobra.Tag("parse").LogV("creating a cmd node")
 	n = NewCmdNode(p.nextIf(tokenName).value, t)
 	name := n.GetCmdName()
-
-	// if strings.HasPrefix(name, "sys.paragraph") && p.inBlockMode {
-	// 	return
-	// }
-
-	// m, ok := p.macros[name]
-	// if ok {
-	// 	p.inBlockMode = m.Block
-	// }
-
-	// if p.inPar && p.inBlockMode {
-
-	// }
-
 	cobra.WithField("name", name).LogV("parsing command (cmd)")
 
+	mac, found := p.macros[name]
+	if !found {
+		err = fmt.Errorf("Line %d: command %q not defined.", n.GetLineNum(), name)
+		return nil, err
+	}
+
+	n.Block = mac.Block
+	return
+}
+
+func (p *parser) parseCmd(n *Cmd) {
 	switch p.peek().typeof {
 	case tokenLeftSquare:
 		p.parseCmdContext(n)
 	case tokenLeftCurly:
 		p.parseSimpleCmd(n)
-	default:
-		return
 	}
-
 	return
 }
 
 func (p *parser) parseSimpleCmd(m *Cmd) {
 	cobra.Tag("parse").LogV("parsing a simple cmd")
-	m.ArgList = []NodeList{p.parseTextBlock(m)}
+	var nl NodeList
+	var err error
+	// m.ArgList = []NodeList{p.parseTextBlock(m)}
+	p.cmdDepth += 1
+	p.nextIf(tokenLeftCurly)
+
+	parScanState := p.parScanOn
+	if m.Block {
+		p.parScanOn = false
+	}
+
+	if m.SysCmd {
+		nl = p.assembleText()
+	} else {
+		nl, _, err = p.parseText()
+		if err != nil {
+			panic(fmt.Errorf(err.Error()))
+		}
+	}
+
+	p.parScanOn = parScanState
+	m.ArgList = []NodeList{nl}
+	p.nextIf(tokenRightCurly)
+	p.cmdDepth -= 1
 	return
 }
 
-func (p *parser) parseSysCmd(m *Cmd) {
-	cobra.Tag("parse").LogV("parsing syscmd")
-	m.ArgList = []NodeList{p.parseTextBlock(m)}
-	return
+func (p *parser) assembleText() NodeList {
+	w := new(strings.Builder)
+	for {
+		t := p.next()
+		switch t.typeof {
+		case tokenRightCurly:
+			p.backup()
+			return NodeList{NewTextNode(w.String())}
+		default:
+			w.WriteString(t.value)
+		}
+	}
 }
+
+// func (p *parser) parseSysCmd(m *Cmd) {
+// 	cobra.Tag("parse").LogV("parsing syscmd")
+// 	m.ArgList = []NodeList{p.parseTextBlock(m)}
+// 	return
+// }
+
+// func (p *parser) parseSysCmd(m *Cmd) {
+// 	cobra.Tag("parse").LogV("parsing syscmd")
+// 	p.next()
+// 	// m.ArgList = []NodeList{p.parseTextBlock(m)}
+// 	p.cmdDepth += 1
+// 	for {
+// 		t := p.next()
+// 		switch t.typeof {
+// 		case tokenRightCurly:
+
+// 		}
+// 	}
+// 	p.cmdDepth -= 1
+// 	m.ArgList = []NodeList{nl}
+// 	return
+// }
 
 func (p *parser) parseCmdContext(m *Cmd) {
 	cobra.Tag("parse").LogV("parsing cmd context")
 	t := p.nextIf(tokenLeftSquare)
 	t = p.peek()
+
 	if t.typeof == tokenLeftAngle {
 		p.parseCmdFlags(m)
 	}
+
+	parScanState := p.parScanOn
+	if m.Block {
+		p.parScanOn = false
+	}
+
+	p.cmdDepth += 1
+
 	t = p.peek()
 	switch t.typeof {
 	case tokenName:
@@ -364,116 +544,79 @@ func (p *parser) parseCmdContext(m *Cmd) {
 		m.Anonymous = true
 		p.parsePostionalArgs(m)
 	}
-	t = p.next()
-	switch t.typeof {
-	case tokenRightSquare:
-		return
-	default:
-		p.errorf("unexpected %q in a command context on line %d", t.value, t.lnum)
-	}
+
+	p.parScanOn = parScanState
+	p.nextIf(tokenRightSquare)
+	p.cmdDepth -= 1
+
+	// t = p.next()
+	// switch t.typeof {
+	// case tokenRightSquare:
+	// 	return
+	// default:
+	// 	p.errorf("unexpected %q in a command context on line %d", t.value, t.lnum)
+	// }
 	return
 }
 
 func (p *parser) parseNamedArgs(m *Cmd) {
 	pMap := make(NodeMap)
 	var nl NodeList
+	var err error
+
 	for {
-		t := p.next()
-		switch t.typeof {
-		case tokenName:
-			argName := t.value
-			cobra.Tag("parse").WithField("arg", argName).LogV("parsing named args")
-			p.nextIf(tokenEqual)
-			nl = p.parseTextBlock(m)
-			pMap[argName] = nl
-		case tokenRightSquare:
+		t := p.nextIf(tokenName)
+		argName := t.value
+		cobra.Tag("parse").WithField("arg", argName).LogV("parsing named args")
+		p.nextIf(tokenEqual)
+		t = p.nextIf(tokenLeftCurly)
+
+		if m.SysCmd {
+			nl = p.assembleText()
+		} else {
+			nl, _, err = p.parseText()
+			if err != nil {
+				panic(fmt.Errorf(err.Error()))
+			}
+		}
+
+		pMap[argName] = nl
+		p.nextIf(tokenRightCurly)
+
+		t = p.peek()
+		if t.typeof == tokenRightSquare {
 			m.ArgMap = pMap
-			p.backup()
 			return
-		default:
-			p.errorf("unexpected %q while parsing a command context on line %d", t.value, t.lnum)
 		}
 	}
+
 	return
 }
 
 func (p *parser) parsePostionalArgs(m *Cmd) {
 	var nl NodeList
+	var err error
 	for {
-		t := p.peek()
-		switch t.typeof {
-		case tokenLeftCurly:
-			nl = p.parseTextBlock(m)
-			m.ArgList = append(m.ArgList, nl)
-			p.linkNodeList(nl)
-		case tokenRightSquare:
-			return
-		default:
-			p.errorf("unexpected %q while parsing command arguments on line %d", t.value, t.lnum)
-		}
-	}
-	return
-}
+		p.nextIf(tokenLeftCurly)
 
-func (p *parser) parseTextBlock(m *Cmd) (nl NodeList) {
-	cobra.Tag("parse").LogV("parsing text block")
-	nl = NodeList{}
-	t := p.nextIf(tokenLeftCurly)
-	for {
-		t = p.next()
-		switch t.typeof {
-		case tokenEmptyLine:
-			if p.parScanOn && !p.insideSysCmd {
-				continue
+		if m.SysCmd {
+			nl = p.assembleText()
+		} else {
+			nl, _, err = p.parseText()
+			if err != nil {
+				panic(fmt.Errorf(err.Error()))
 			}
-			n := p.makeTextNode(t)
-			nl = append(nl, n)
-			p.link(n)
-		case tokenIndent:
-			if p.reflow && !p.insideSysCmd {
-				continue
-			} else {
-				n := p.makeTextNode(t)
-				p.root.append(n)
-				p.link(n)
-			}
-		case tokenLineBreak:
-			if p.parScanOn && !p.insideSysCmd {
-				p.parseParagraph(t)
-			} else {
-				n := p.makeTextNode(t)
-				nl = append(nl, n)
-				p.link(n)
-			}
-		case tokenText:
-			cobra.Tag("parse").LogV("adding textNode to NodeList")
-			if p.parScanOn && !p.insidePar {
-				p.insidePar = true
-				p.root.append(NewParBeginNode(t))
-			}
-			n := NewTextNode(t.value)
-			nl = append(nl, n)
-			p.link(n)
-		// case tokenSysCmd:
-		// 	n := p.makeCmd(t)
-		// 	n.SysCmd = true
-		// 	p.insideSysCmd = true
-		// 	cobra.Tag("parse").LogV("adding sysCmdStart to NodeList")
-		// 	nl = append(nl, n)
-		// 	p.link(n)
-		case tokenCmdStart:
-			n := p.makeCmd(t)
-			cobra.Tag("parse").LogV("adding cmdStart to NodeList")
-			nl = append(nl, n)
-			p.link(n)
-		case tokenRightCurly:
-			cobra.Tag("parse").LogV("finished text block")
+		}
+
+		m.ArgList = append(m.ArgList, nl)
+		p.linkNodeList(nl)
+		p.nextIf(tokenRightCurly)
+
+		t := p.peek()
+		if t.typeof == tokenRightSquare {
 			return
-		default:
-			p.errorf("unexpected %q while parsing text block on line %d", t.value, t.lnum)
 		}
 	}
-	cobra.LogV("We should never get here")
 	return
 }
 

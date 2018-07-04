@@ -95,13 +95,22 @@ func newArgsCheckTestCase(m *Macro, n string, cmd string, loc int, exp string, e
 
 func testValidateArgs(t *testing.T, test *argsCheckTestCase) {
 	opt := &Options{Plain: true}
-	root, _, _ := Parse(test.name, test.command, opt)
+	opt.Macros = NewMacroMap()
+	opt.Macros["testCmd"] = NewMacro("testCmd", "", nil, nil)
+	opt.Macros["sys.Z"] = NewMacro("sys.Z", "", nil, nil)
+	root, _, err := Parse(test.name, test.command, opt)
+
+	if err != nil {
+		t.Errorf("%s:\nParse failed: %s", test.name, err)
+		return
+	}
+
 	// var r Node
 	// r = Node(root)
 	// for r := r.Ahead(); r != nil; r = r.Ahead() {
 	// 	fmt.Println(r)
 	// }
-	cmdNode := root.NodeList[test.loc] // +1 to skip the opening paragraph command
+	cmdNode := root.NodeList[test.loc]
 	args, err := test.Macro.ValidateArgs(cmdNode.(*Cmd))
 	switch {
 	case err != nil && !test.expErr:

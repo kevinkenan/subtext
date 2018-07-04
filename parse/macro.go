@@ -25,6 +25,7 @@ type MacroDef struct {
 	Template   string        // The Go template that defines the macro
 	Parameters []string      // Required parameters
 	Optionals  yaml.MapSlice // Optional parameters in correct order
+	Format     string        // The format, e.g. html or latex
 	Block      bool          // True if macro should be rendered as a block
 	Delims     [2]string     // Left and right delim used in the template
 }
@@ -40,10 +41,13 @@ func NewMacroMap() MacroMap {
 		NewMacro("sys.newmacrof", "", []string{"def"}, nil),
 		NewMacro("sys.config", "", []string{"configs"}, nil),
 		NewMacro("sys.configf", "", []string{"configs"}, nil),
+		NewMacro("subtext", "subtext, version 0.0.1", nil, nil),
+		NewBlockMacro("Subtext", "subtext, version 0.0.1", nil, nil),
+		// m.Block = true
 		// NewMacro("paragraph.begin", "\n", []string{"orig"}, nil),
 		// NewMacro("paragraph.end", "\n", []string{"orig"}, nil),
-		NewMacro("paragraph.begin", "|", nil, nil),
-		NewMacro("paragraph.end", "|\n", nil, nil),
+		NewMacro("paragraph.begin", "<", nil, nil),
+		NewMacro("paragraph.end", ">\n", nil, nil),
 	}
 
 	// Add default macros
@@ -60,9 +64,23 @@ type Macro struct {
 	*template.Template             // the parsed template
 	Parameters         []string    // Required parameters
 	Optionals          []*Optional // Optional parameters in correct order
+	Format     string        // The format, e.g. html or latex
 	Block              bool        // True if macro should be rendered as a block
 	Ld                 string      // Left delim used in the template
 	Rd                 string      // Right delim used in the template
+}
+
+func NewBlockMacro(name, tmplt string, params []string, optionals []*Optional) *Macro {
+	t := template.Must(template.New(name).Option("missingkey=error").Parse(tmplt))
+	return &Macro{
+		Name:         name,
+		Parameters:   params,
+		Optionals:    optionals,
+		TemplateText: tmplt,
+		Template:     t,
+		Block:        true,
+		Ld:           "((",
+		Rd:           "))"}
 }
 
 func NewMacro(name, tmplt string, params []string, optionals []*Optional) *Macro {
@@ -73,8 +91,8 @@ func NewMacro(name, tmplt string, params []string, optionals []*Optional) *Macro
 		Optionals:    optionals,
 		TemplateText: tmplt,
 		Template:     t,
-		Ld:           "{{",
-		Rd:           "}}"}
+		Ld:           "((",
+		Rd:           "))"}
 }
 
 func (m *Macro) Parse() {
@@ -87,6 +105,7 @@ func (m *Macro) String() string {
 	// w.WriteString("\n")
 	w.WriteString(fmt.Sprintf("Name %s, ", m.Name))
 	w.WriteString(fmt.Sprintf("  Template %s, ", m.TemplateText))
+	w.WriteString(fmt.Sprintf("  Format %s, ", m.Format))
 	w.WriteString(fmt.Sprintf("  Parms %s,", m.Parameters))
 	w.WriteString(fmt.Sprintf("  ListOpts %s", m.ListOptions()))
 	return w.String()

@@ -160,7 +160,7 @@ func MakeCmd(cmd *cobra.Command, args []string) error {
 	d.Output = cobra.GetString("output")
 	d.Packages = cobra.GetStringSlice("packages")
 	d.Options = &parse.Options{
-		Plain: cobra.GetBool("plain"),
+		Plain:  cobra.GetBool("plain"),
 		Reflow: cobra.GetBool("reflow"),
 		Macros: *new(parse.MacroMap),
 	}

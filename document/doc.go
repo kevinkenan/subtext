@@ -167,25 +167,25 @@ func (r *Render) renderNode(n parse.Node) string {
 			return ""
 		}
 
-		if r.ParBuffer != nil {
-			cobra.Tag("render").LogV("processing paragraph buffer in text")
-			par := r.ParBuffer
-			r.ParBuffer = nil
-			s.WriteString(r.processCmd(par))
-		}
+		// if r.ParBuffer != nil {
+		// 	cobra.Tag("render").LogV("processing paragraph buffer in text")
+		// 	par := r.ParBuffer
+		// 	r.ParBuffer = nil
+		// 	s.WriteString(r.processCmd(par))
+		// }
 
 		cobra.Tag("render").LogV("rendering text")
 
 		// // reflow paragraph if requested
-		var text string
-		if r.ParagraphMode && r.InParagraph && r.ReflowPars {
-			cobra.Tag("render").LogV("reflowing paragraph")
-			// text = strings.Join(strings.Fields(n.(*parse.Text).GetText()), " ")
-			text = strings.Replace(n.(*parse.Text).GetText(), "\n", " ", -1)
-		} else {
-			text = n.(*parse.Text).GetText()
-		}
-		// text := n.(*parse.Text).GetText()
+		// var text string
+		// if r.ParagraphMode && r.InParagraph && r.ReflowPars {
+		// 	cobra.Tag("render").LogV("reflowing paragraph")
+		// 	// text = strings.Join(strings.Fields(n.(*parse.Text).GetText()), " ")
+		// 	text = strings.Replace(n.(*parse.Text).GetText(), "\n", " ", -1)
+		// } else {
+		// 	text = n.(*parse.Text).GetText()
+		// }
+		text := n.(*parse.Text).GetText()
 		s.WriteString(text)
 
 	case *parse.Cmd:
@@ -232,72 +232,17 @@ func (r *Render) processSysCmd(n *parse.Cmd) string {
 	flowStyle := false
 	cobra.Tag("render").WithField("cmd", name).LogV("processing system command (cmd)")
 	switch name {
-	case "sys.configf":
+	case "configf":
 		flowStyle = true
 		fallthrough
-	case "sys.config":
+	case "config":
 		r.handleSysConfigCmd(n, flowStyle)
-	case "sys.init.begin":
-		r.init = true
-	case "sys.init.end":
-		r.init = false
-	case "sys.newmacrof":
-		flowStyle = true
-		name = "sys.newmacro"
-		fallthrough
-	case "sys.newmacro":
-		// Retrieve the sys.newmacro system command
-		// d, found := r.macros[name]
-		// if !found {
-		// 	panic(RenderError{message: fmt.Sprintf("Line %d: system command %q not defined.", n.GetLineNum(), name)})
-		// }
-		// cobra.Tag("cmd").Strunc("macro", d.TemplateText).LogfV("retrieved system command definition")
-
-		// args, err := d.ValidateArgs(n)
-		// if err != nil {
-		// 	panic(RenderError{message: fmt.Sprintf("Line %d: ValidateArgs failed on system command %q: %q", n.GetLineNum(), name, err)})
-		// }
-
-		// cobra.Tag("cmd").Strunc("syscmd", args["def"].String()).LogfV("system command: %s", args["def"])
-		// var mdef parse.MacroDef
-		// if flowStyle {
-		// 	err = yaml.Unmarshal([]byte("{"+args["def"].String()+"}"), &mdef)
-		// } else {
-		// 	err = yaml.Unmarshal([]byte(args["def"].String()), &mdef)
-		// }
-		// if err != nil {
-		// 	panic(RenderError{message: fmt.Sprintf("Line %d: unmarshall error for system command %q: %q", n.GetLineNum(), name, err)})
-		// }
-		// cobra.Tag("cmd").LogfV("marshalled syscmd: %+v", mdef)
-
-		// opts := []*parse.Optional{}
-		// for _, opt := range mdef.Optionals {
-		// 	opts = append(opts, parse.NewOptional(opt.Key.(string), opt.Value.(string)))
-		// }
-
-		// left, right := mdef.Delims[0], mdef.Delims[1]
-
-		// if left == "" {
-		// 	left = "(("
-		// }
-
-		// if right == "" {
-		// 	right = "))"
-		// }
-
-		// m := &parse.Macro{
-		// 	Name:         mdef.Name,
-		// 	TemplateText: mdef.Template,
-		// 	Parameters:   mdef.Parameters,
-		// 	Optionals:    opts,
-		// 	Block:        mdef.Block,
-		// 	Ld:           left,
-		// 	Rd:           right,
-		// }
-
-		// m.Parse()
-		// r.macros[m.Name] = m
-		// cobra.Tag("cmd").LogfV("loaded new macro")
+	case "init.begin":
+		// r.init = true
+	case "init.end":
+		// r.init = false
+	default:
+		panic(RenderError{message: fmt.Sprintf("Line %d: unknown system command: %q", n.GetLineNum(), name)})
 	}
 	return ""
 }
@@ -341,27 +286,27 @@ func (r *Render) processCmd(n *parse.Cmd) string {
 	cobra.Tag("render").WithField("cmd", name).LogV("rendering command (cmd)")
 	cmdLog := cobra.Tag("cmd")
 
-	// If we are in paragraph mode, scanner generated paragraphs (prefixed
-	// with "sys.") require extra processing to remove empty paragraphs. If
-	// the paragraph isn't empty, we remove the prefix so that regular
-	// paragraph handling is triggered.
-	if r.ParagraphMode {
-		switch {
-		case name == "sys.paragraph.begin":
-			n.NodeValue = parse.NodeValue("paragraph.begin")
-			r.InParagraph = true
-			r.ParBuffer = n
-			return ""
-		case name == "sys.paragraph.end":
-			r.InParagraph = false
-			if r.ParBuffer != nil {
-				r.ParBuffer = nil
-				cobra.Tag("render").LogfV("empty paragraph so skipping nodes")
-				return ""
-			}
-			name = "paragraph.end"
-		}
-	}
+	// // If we are in paragraph mode, scanner generated paragraphs (prefixed
+	// // with "sys.") require extra processing to remove empty paragraphs. If
+	// // the paragraph isn't empty, we remove the prefix so that regular
+	// // paragraph handling is triggered.
+	// if r.ParagraphMode {
+	// 	switch {
+	// 	case name == "sys.paragraph.begin":
+	// 		n.NodeValue = parse.NodeValue("paragraph.begin")
+	// 		r.InParagraph = true
+	// 		r.ParBuffer = n
+	// 		return ""
+	// 	case name == "sys.paragraph.end":
+	// 		r.InParagraph = false
+	// 		if r.ParBuffer != nil {
+	// 			r.ParBuffer = nil
+	// 			cobra.Tag("render").LogfV("empty paragraph so skipping nodes")
+	// 			return ""
+	// 		}
+	// 		name = "paragraph.end"
+	// 	}
+	// }
 
 	// Get the macro definition.
 	m, found := r.macros[name]
@@ -397,12 +342,19 @@ func (r *Render) processCmd(n *parse.Cmd) string {
 	cmdLog.Copy().Add("name", name).Add("ld", m.Ld).Logf("executed macro, ready for parsing")
 
 	// Handle commands embedded in the macro.
-	output, _, err := parse.ParseMacro(name, s)
+	opts := &parse.Options{Plain: true, Macros: r.macros}
+	output, _, err := parse.Parse(name, s, opts)
 	if err != nil {
 		panic(RenderError{message: fmt.Sprintf("Line %d: error in template for macro %q: %q", n.GetLineNum(), name, err)})
 	} else {
 		cmdLog.Copy().Add("nodes", output.Count()-1).LogfV("parsed macro, ready for rendering")
-		return r.render(output)
+		outs := r.render(output)
+
+		if n.Block && !r.Options.Plain {
+			outs = outs + "\n"
+		}
+
+		return outs
 	}
 
 	// cobra.Tag("cmd").LogfV(">> %q", s)

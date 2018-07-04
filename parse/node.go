@@ -200,8 +200,10 @@ func (nl *Section) String() string {
 	return b.String()
 }
 
-func (nl *Section) append(n Node) {
-	nl.NodeList = append(nl.NodeList, n)
+func (s *Section) append(nl NodeList) {
+	for _, n := range nl {
+		s.NodeList = append(s.NodeList, n)
+	}
 }
 
 func (sec *Section) Count() (c int) {
@@ -417,6 +419,7 @@ type Cmd struct {
 	cmdToken *token
 	Peek
 	SysCmd bool // true if the command is a system command.
+	Block  bool // true if the command is a block
 }
 
 type Arguments struct {
@@ -426,6 +429,10 @@ type Arguments struct {
 }
 
 func NewCmdNode(name string, t *token) *Cmd {
+	syscmd := t.typeof == tokenSysCmdStart
+	if syscmd {
+		name = "sys." + name
+	}
 	cobra.Tag("node").LogV("cmd")
 	return &Cmd{
 		NodeType:  nCmd,
@@ -434,6 +441,7 @@ func NewCmdNode(name string, t *token) *Cmd {
 		Arguments: Arguments{true, []NodeList{}, nil},
 		Flags:     []string{},
 		cmdToken:  t,
+		SysCmd:    syscmd,
 	}
 }
 
@@ -498,11 +506,9 @@ func (cmd *Cmd) selectAnonymousArguments(reqParams, optParams []string) (NodeMap
 		selected[p] = cmd.ArgList[i]
 	}
 
-	for i := len(reqParams); i < len(cmd.ArgList); i++ {
+	for i, j := len(reqParams), 0; i < len(cmd.ArgList); i, j = i+1, j+1 {
 		// Add the optional arguments.
-		for _, opt := range optParams {
-			selected[opt] = cmd.ArgList[i]
-		}
+		selected[optParams[j]] = cmd.ArgList[i]
 	}
 
 	cobra.Tag("cmd").WithField("selected", len(selected)).LogV("valid number of args")

@@ -667,38 +667,38 @@ Loop:
 	return nil
 }
 
-func (s *scanner) insertParagraphBeginCmd() {
-	if s.isInsidePar() || s.isParScanOff() {
-		cobra.Tag("scan").LogV("aborting insertParagraphBeginCmd")
-		return
-	}
-	cobra.Tag("scan").LogV("insertParagraphBeginCmd")
-	s.setInsidePar(true)
-	s.emitInsertedToken(tokenCmdStart, "")
-	s.emitInsertedToken(tokenName, "sys.paragraph.begin")
-	s.emitInsertedToken(tokenLeftSquare, "[")
-	s.emitInsertedToken(tokenLeftCurly, "{")
-	s.emitRawToken(tokenText)
-	s.emitInsertedToken(tokenRightCurly, "}")
-	s.emitInsertedToken(tokenRightSquare, "]")
-}
+// func (s *scanner) insertParagraphBeginCmd() {
+// 	if s.isInsidePar() || s.isParScanOff() {
+// 		cobra.Tag("scan").LogV("aborting insertParagraphBeginCmd")
+// 		return
+// 	}
+// 	cobra.Tag("scan").LogV("insertParagraphBeginCmd")
+// 	s.setInsidePar(true)
+// 	s.emitInsertedToken(tokenCmdStart, "")
+// 	s.emitInsertedToken(tokenName, "sys.paragraph.begin")
+// 	s.emitInsertedToken(tokenLeftSquare, "[")
+// 	s.emitInsertedToken(tokenLeftCurly, "{")
+// 	s.emitRawToken(tokenText)
+// 	s.emitInsertedToken(tokenRightCurly, "}")
+// 	s.emitInsertedToken(tokenRightSquare, "]")
+// }
 
-func (s *scanner) insertParagraphEndCmd() {
-	if !s.isInsidePar() || s.isParScanOff() {
-		cobra.Tag("scan").LogV("aborting insertParagraphEndCmd")
-		return
-	}
-	cobra.Tag("scan").LogV("insertParagraphEndCmd")
-	s.setInsidePar(false)
-	s.emitInsertedToken(tokenCmdStart, "")
-	s.emitInsertedToken(tokenName, "sys.paragraph.end")
-	s.emitInsertedToken(tokenLeftSquare, "[")
-	s.emitInsertedToken(tokenLeftCurly, "{")
-	// s.next()
-	s.emitRawToken(tokenText)
-	s.emitInsertedToken(tokenRightCurly, "}")
-	s.emitInsertedToken(tokenRightSquare, "]")
-}
+// func (s *scanner) insertParagraphEndCmd() {
+// 	if !s.isInsidePar() || s.isParScanOff() {
+// 		cobra.Tag("scan").LogV("aborting insertParagraphEndCmd")
+// 		return
+// 	}
+// 	cobra.Tag("scan").LogV("insertParagraphEndCmd")
+// 	s.setInsidePar(false)
+// 	s.emitInsertedToken(tokenCmdStart, "")
+// 	s.emitInsertedToken(tokenName, "sys.paragraph.end")
+// 	s.emitInsertedToken(tokenLeftSquare, "[")
+// 	s.emitInsertedToken(tokenLeftCurly, "{")
+// 	// s.next()
+// 	s.emitRawToken(tokenText)
+// 	s.emitInsertedToken(tokenRightCurly, "}")
+// 	s.emitInsertedToken(tokenRightSquare, "]")
+// }
 
 // Scans for ◊ characters which toggles comments.
 func scanCommentToggle(s *scanner) {

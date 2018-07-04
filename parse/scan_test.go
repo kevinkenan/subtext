@@ -170,12 +170,57 @@ var commonTestCases = []testCase{
 		tEOF}),
 
 	// Cmd Tests
-	newCase("basic command", "1 •cmd 2", tokenList{
+	newCase("basic command", "•cmd A", tokenList{
+		tCmdStart,
+		tName,
+		tText,
+		tEOF}),
+	newCase("subtext block command", "•Subtext[]  \nA", tokenList{
+		tCmdStart,
+		tName,
+		tLeftSquare,
+		tRightSquare,
+		tText,
+		tLineBreak,
+		tText,
+		tEOF}),
+	newCase("basic command with text", "1 •cmd 2", tokenList{
 		tText,
 		tCmdStart,
 		tName,
 		tText,
 		tEOF}),
+	newCase("new macro",
+		`•(newmacro){
+    name: section
+    block: true
+    parameters: ["text"]
+    template: "((.text))"
+}
+•section{a}`, tokenList{tSysCmdStart,
+			tName,
+			tLeftCurly,
+			tLineBreak,
+			tIndent,
+			tText,
+			tLineBreak,
+			tIndent,
+			tText,
+			tLineBreak,
+			tIndent,
+			tText,
+			tLineBreak,
+			tIndent,
+			tText,
+			tLineBreak,
+			tRightCurly,
+			tLineBreak,
+			tCmdStart,
+			tName,
+			tLeftCurly,
+			tText,
+			tRightCurly,
+			tEOF}),
 	newCase("simple command with empty body", "1•2{}{}3", tokenList{
 		tText,
 		tCmdStart,
@@ -193,8 +238,7 @@ var commonTestCases = []testCase{
 		tRightCurly,
 		tText,
 		tEOF}),
-	newCase("two text blocks with nested command", "1•2[{a•b{c}}]4", tokenList{
-		tText,
+	newCase("two text blocks with nested command", "•2[{a•b{c}}]4", tokenList{
 		tCmdStart,
 		tName,
 		tLeftSquare,
@@ -234,6 +278,16 @@ var commonTestCases = []testCase{
 		tName,
 		tLeftSquare,
 		tRightSquare,
+		tText,
+		tEOF}),
+	newCase("command with empty list and spaces", "•A[]  \n\nB", tokenList{
+		tCmdStart,
+		tName,
+		tLeftSquare,
+		tRightSquare,
+		tText,
+		tLineBreak,
+		tLineBreak,
 		tText,
 		tEOF}),
 	newCase("command with partial list", "1•2[3=]4", tokenList{

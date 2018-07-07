@@ -11,6 +11,8 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+var Data map[string]interface{} = map[string]interface{}{}
+
 type Optional struct {
 	Name    string
 	Default string
@@ -45,6 +47,8 @@ func NewMacroMap() MacroMap {
 		NewMacro("sys.newmacrof", "", []string{"def"}, nil),
 		NewMacro("sys.config", "", []string{"configs"}, nil),
 		NewMacro("sys.configf", "", []string{"configs"}, nil),
+		NewMacro("sys.init.begin", "", nil, nil),
+		NewMacro("sys.init.end", "", nil, nil),
 		NewMacro("subtext", "subtext, version 0.0.1", nil, nil),
 		NewBlockMacro("Subtext", "subtext, version 0.0.1", nil, nil),
 		// m.Block = true
@@ -52,6 +56,11 @@ func NewMacroMap() MacroMap {
 		// NewMacro("paragraph.end", "\n", []string{"orig"}, nil),
 		NewMacro("paragraph.begin", "<", nil, nil),
 		NewMacro("paragraph.end", ">\n", nil, nil),
+		// Test data macros
+		NewMacro("sys.setdata", "", []string{"data"}, nil),
+		NewMacro("sys.setdataf", "", []string{"data"}, nil),
+		NewMacro("sys.exec", "", []string{"template"}, nil),
+		NewMacro("sys.incr", "", []string{"key"}, []*Optional{NewOptional("amount", "1")}),
 	}
 
 	mt := MacroType{Name: "", Format: ""}
@@ -96,7 +105,7 @@ type Macro struct {
 }
 
 func NewBlockMacro(name, tmplt string, params []string, optionals []*Optional) *Macro {
-	t := template.Must(template.New(name).Option("missingkey=error").Parse(tmplt))
+	t := template.Must(template.New(name).Funcs(funcMap).Delims("((", "))").Option("missingkey=error").Parse(tmplt))
 	return &Macro{
 		Name:         name,
 		Parameters:   params,
@@ -109,7 +118,7 @@ func NewBlockMacro(name, tmplt string, params []string, optionals []*Optional) *
 }
 
 func NewMacro(name, tmplt string, params []string, optionals []*Optional) *Macro {
-	t := template.Must(template.New(name).Option("missingkey=error").Parse(tmplt))
+	t := template.Must(template.New(name).Funcs(funcMap).Delims("((", "))").Option("missingkey=error").Parse(tmplt))
 	return &Macro{
 		Name:         name,
 		Parameters:   params,
@@ -121,7 +130,7 @@ func NewMacro(name, tmplt string, params []string, optionals []*Optional) *Macro
 }
 
 func (m *Macro) Parse() {
-	t := template.Must(template.New(m.Name).Delims(m.Ld, m.Rd).Option("missingkey=error").Parse(m.TemplateText))
+	t := template.Must(template.New(m.Name).Funcs(funcMap).Delims(m.Ld, m.Rd).Option("missingkey=error").Parse(m.TemplateText))
 	m.Template = t
 }
 
@@ -258,3 +267,38 @@ func (p *parser) addNewMacro(n *Cmd, flowStyle bool) error {
 	cobra.Tag("cmd").LogfV("loaded new macro")
 	return nil
 }
+
+// func (p *parser) addData(n *Cmd, flowStyle bool) error {
+// 	cobra.Tag("cmd").LogfV("begin addData")
+// 	name := "sys.data"
+// 	// Retrieve the sys.data system command
+// 	d := p.macros.GetMacro(name, p.format)
+// 	if d == nil {
+// 		return fmt.Errorf("Line %d: system command %q not defined.", n.GetLineNum(), name)
+// 	}
+
+// 	args, err := d.ValidateArgs(n)
+// 	if err != nil {
+// 		return fmt.Errorf("Line %d: ValidateArgs failed on system command %q: %q", n.GetLineNum(), name, err)
+// 	}
+
+// 	cobra.Tag("cmd").Strunc("syscmd", args["data"].String()).LogfV("system command: %s", args["data"])
+// 	data := make(map[interface{}]interface{})
+
+// 	if flowStyle {
+// 		err = yaml.Unmarshal([]byte("{"+args["data"].String()+"}"), data)
+// 	} else {
+// 		err = yaml.Unmarshal([]byte(args["data"].String()), data)
+// 	}
+
+// 	if err != nil {
+// 		return fmt.Errorf("Line %d: unmarshall error for system command %q: %q", n.GetLineNum(), name, err)
+// 	}
+
+// 	for k, v := range data {
+// 		Data[k.(string)] = v
+// 	}
+
+// 	cobra.Tag("cmd").LogfV("end addData")
+// 	return nil
+// }

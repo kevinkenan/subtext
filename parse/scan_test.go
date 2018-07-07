@@ -45,8 +45,7 @@ var (
 	tRunes               = tkn(tokenRunes, "")
 	tEmptyLine           = tkn(tokenEmptyLine, "")
 	tIndent              = tkn(tokenIndent, "")
-	tEOLComment          = tkn(tokenEOLComment, "")
-	tToggleComment       = tkn(tokenToggleComment, "")
+	tComment             = tkn(tokenComment, "")
 	tLineBreak           = tkn(tokenLineBreak, "")
 	tLeftParenthesis     = tkn(tokenLeftParenthesis, "")
 	tRightParenthesis    = tkn(tokenRightParenthesis, "")
@@ -372,14 +371,15 @@ var commonTestCases = []testCase{
 		tRightSquare,
 		tText,
 		tEOF}),
-	newCase("command with eolComment in body text", "1•2{3•|4\n5}6", tokenList{
+	newCase("command with eolComment in body text", "1•2{3◊•4\n5}6", tokenList{
 		tText,
 		tCmdStart,
 		tName,
 		tLeftCurly,
 		tText,
-		tEOLComment,
-		tText,
+		tComment,
+		tCmdStart,
+		tName,
 		tLineBreak,
 		tText,
 		tRightCurly,
@@ -529,45 +529,6 @@ var commonTestCases = []testCase{
 		tRightSquare,
 		tEOF}),
 
-	// EOL Comments
-	newCase("eolComment", "1•|2\n3", tokenList{
-		tText,
-		tEOLComment,
-		tText,
-		tLineBreak,
-		tText,
-		tEOF}),
-	newCase("eolComment at EOL", "1•|\n3", tokenList{
-		tText,
-		tEOLComment,
-		tLineBreak,
-		tText,
-		tEOF}),
-	newCase("eolComment at EOF", "1•|23", tokenList{
-		tText,
-		tEOLComment,
-		tText,
-		tEOF}),
-	// newLocCase("eolComment with embedded command", "1•|•2\n3", tokenList{
-	// 	t{tokenText,
-	// 	t{tokenText,
-	// 	t{tokenEOF,
-	newCase("eolComment with CR", "1•|2\r\n3", tokenList{
-		tText,
-		tEOLComment,
-		tText,
-		tLineBreak,
-		tText,
-		tEOF}),
-	newCase("eolComment followed by toggle comment", "1•|◊\n2◊3", tokenList{
-		tText,
-		tEOLComment,
-		tToggleComment,
-		tLineBreak,
-		tText,
-		tToggleComment,
-		tText,
-		tEOF}),
 
 	// Toggle comment tests.
 	// newLocCase("basic toggle comment", "1◊longtext◊3\n4", tokenList{
@@ -579,12 +540,12 @@ var commonTestCases = []testCase{
 		tText,
 		tEOF}),
 	newCase("toggle comment entire string", "◊this is everythging", tokenList{
-		tToggleComment,
+		tComment,
 		tText,
 		tEOF}),
 	newCase("toggle comment entire string after one char", "1◊2", tokenList{
 		tText,
-		tToggleComment,
+		tComment,
 		tText,
 		tEOF}),
 	// newLocCase("toggle comment eats newline", "1◊\n2◊3", tokenList{
@@ -602,9 +563,9 @@ var commonTestCases = []testCase{
 		tName,
 		tLeftCurly,
 		tText,
-		tToggleComment,
+		tComment,
 		tText,
-		tToggleComment,
+		tComment,
 		tText,
 		tRightCurly,
 		tEOF}),
@@ -614,11 +575,11 @@ var commonTestCases = []testCase{
 		tLeftSquare,
 		tName,
 		tEqual,
-		tToggleComment,
+		tComment,
 		tLeftCurly,
 		tText,
 		tRightCurly,
-		tToggleComment,
+		tComment,
 		tLeftCurly,
 		tText,
 		tRightCurly,
@@ -631,11 +592,11 @@ var commonTestCases = []testCase{
 		tName,
 		tEqual,
 		tLeftCurly,
-		tToggleComment,
+		tComment,
 		tText,
 		tRightCurly,
 		tLeftCurly,
-		tToggleComment,
+		tComment,
 		tText,
 		tRightCurly,
 		tRightSquare,

@@ -453,6 +453,25 @@ func (c *Cmd) GetTokenValue() string {
 	return c.cmdToken.value
 }
 
+func (c *Cmd) HasFlag(s string) bool {
+	for _, f := range c.Flags {
+		if f == s {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Cmd) HasFlagVar(s string) (string, bool) {
+	s = s + "="
+	for _, f := range c.Flags {
+		if strings.HasPrefix(f, s) {
+			return strings.TrimPrefix(f, s), true
+		}
+	}
+	return "", false
+}
+
 // SelectArguments returns a map of the command's arguments which match the
 // function's parameter arguments. Arguments that are not required or optional
 // are returned in the 'unknown' slice. If the arguments don't include a

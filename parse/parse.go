@@ -126,6 +126,9 @@ func (p *parser) backup() {
 }
 
 func (p *parser) nextIf(ttype tokenType) (t *token) {
+	if p.peek().typeof == tokenComment {
+		p.parseComment()
+	}
 	if t = p.next(); t.typeof == ttype {
 		return
 	}
@@ -199,6 +202,8 @@ func (p *parser) parseText() (nl NodeList, done bool, err error) {
 	for {
 		t := p.next()
 		switch t.typeof {
+		case tokenComment:
+			p.parseComment()
 		case tokenSpaceEater:
 			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("begin")
 		spaceEater:
@@ -293,10 +298,12 @@ func (p *parser) parseText() (nl NodeList, done bool, err error) {
 			case "sys.newmacro":
 				err = p.addNewMacro(n, false)
 			default:
-				// n.NodeValue = NodeValue(fmt.Sprintf("sys.%s", n.NodeValue))
-				// p.root.append(n)
 				nl = append(nl, n)
 				p.link(n)
+			}
+
+			if err != nil {
+				return nil, true, err
 			}
 
 			p.insideSysCmd = false
@@ -331,11 +338,22 @@ func (p *parser) parseText() (nl NodeList, done bool, err error) {
 			cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("end")
 			return
 		default:
-			p.errorf("Line %d: unexpected token %q when starting with value %q", t.lnum, tokenTypeLookup(t.typeof), t.value)
+			p.errorf("Line %d: unexpected token %q in parseText", t.lnum, tokenTypeLookup(t.typeof))
 		}
 	}
 	cobra.Tag("parse").LogV("This should be impossilbe")
 	return
+}
+
+func (p *parser) parseComment() {
+	for {
+		switch p.next().typeof {
+			case tokenLineBreak, tokenEOF:
+				return
+			default:
+				continue
+		}
+	}
 }
 
 func (p *parser) blockSpaceEater() {
@@ -344,6 +362,8 @@ loop:
 		nxt := p.next()
 		cobra.Tag("parse").Strunc("text", nxt.value).LogV("post block text")
 		switch nxt.typeof {
+		case tokenComment:
+			p.parseComment()
 		case tokenEmptyLine, tokenIndent, tokenLineBreak, tokenSpaceEater:
 			cobra.Tag("parse").LogV("eating space")
 			continue
@@ -368,6 +388,8 @@ func (p *parser) parseParagraph(t *token) (nl NodeList) {
 loop:
 	for {
 		switch p.peek().typeof {
+		case tokenComment:
+			p.parseComment()
 		case tokenLineBreak, tokenEmptyLine:
 			n := p.next().typeof
 			if n == tokenLineBreak {
@@ -417,6 +439,8 @@ func (p *parser) makeTextNode(t *token) (*Text, int) {
 	if p.reflow {
 		s = strings.TrimRight(s, " \t")
 		switch p.peek().typeof {
+		case tokenComment:
+			p.parseComment()
 		case tokenLineBreak, tokenEOF, tokenRightCurly, tokenRightSquare:
 		default:
 			if len(s) < l {
@@ -437,8 +461,7 @@ func (p *parser) makeCmd(t *token) (n *Cmd, err error) {
 
 	mac := p.macros.GetMacro(name, p.format)
 	if mac == nil {
-		err = fmt.Errorf("Line %d: command %q not defined.", n.GetLineNum(), name)
-		return nil, err
+		return nil, fmt.Errorf("Line %d: command %q not defined.", n.GetLineNum(), name)
 	}
 
 	n.Block = mac.Block
@@ -447,6 +470,8 @@ func (p *parser) makeCmd(t *token) (n *Cmd, err error) {
 
 func (p *parser) parseCmd(n *Cmd) {
 	switch p.peek().typeof {
+	case tokenComment:
+		p.parseComment()
 	case tokenLeftSquare:
 		p.parseCmdContext(n)
 	case tokenLeftCurly:
@@ -489,6 +514,8 @@ func (p *parser) assembleText() NodeList {
 	for {
 		t := p.next()
 		switch t.typeof {
+		case tokenComment:
+			p.parseComment()
 		case tokenRightCurly:
 			p.backup()
 			return NodeList{NewTextNode(w.String())}
@@ -516,6 +543,8 @@ func (p *parser) parseCmdContext(m *Cmd) {
 
 	t = p.peek()
 	switch t.typeof {
+	case tokenComment:
+		p.parseComment()
 	case tokenName:
 		m.Anonymous = false
 		p.parseNamedArgs(m)
@@ -597,6 +626,8 @@ func (p *parser) parseCmdFlags(m *Cmd) {
 	for {
 		t = p.next()
 		switch t.typeof {
+		case tokenComment:
+			p.parseComment()
 		case tokenRunes:
 			cobra.Tag("parse").WithField("flag", t.value).LogV("parsing cmd flags")
 			m.Flags = append(m.Flags, t.value)

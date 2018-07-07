@@ -22,8 +22,7 @@ const (
 	tokenRunes                             // A string of runes.
 	tokenEmptyLine                         // a line containing only spaces and tabs
 	tokenIndent                            // whitespace at the beginning of a line
-	tokenEOLComment                        // ignore the rest of the line
-	tokenToggleComment                     // ignore input until the next toggle
+	tokenComment                           // ignore the rest of the line
 	tokenLineBreak                         // \n
 	tokenLeftParenthesis                   // (
 	tokenRightParenthesis                  // )
@@ -55,8 +54,7 @@ var tokenNames = []string{
 	"tokenRunes",
 	"tokenEmptyLine",
 	"tokenIndent",
-	"tokenEOLComment",
-	"tokenToggleComment",
+	"tokenComment",
 	"tokenLineBreak",
 	"tokenLeftParenthesis",
 	"tokenRightParenthesis",
@@ -124,7 +122,7 @@ type scanner struct {
 	input         string     // the string being scanned
 	cmdH          string     // rune indicating a horizontal-mode command
 	cmdV          string     // rune indicating a vertical-mode command
-	commentToggle string     // rune that toggles commenting
+	comment       string     // rune indicating EOL comment
 	parCmd        string     // rune indicating a paragraph command
 	pos           Loc        // current position in the input
 	start         Loc        // start position of this item
@@ -153,7 +151,7 @@ func NewScanner(name, input string) *scanner {
 		input:         input,
 		cmdH:          "•",
 		cmdV:          "§",
-		commentToggle: "◊",
+		comment:       "◊",
 		parCmd:        "¶",
 		tokens:        make(chan token),
 		line:          1,
@@ -330,9 +328,9 @@ func (s *scanner) isHorizCmd() bool {
 	return s.horizMode
 }
 
-// isCommentToggle returns true if the rune is the comment toggle character.
-func (s *scanner) isCommentToggle(r rune) bool {
-	q, _ := utf8.DecodeRuneInString(s.commentToggle)
+// isComment returns true if the rune is the EOL comment character.
+func (s *scanner) isComment(r rune) bool {
+	q, _ := utf8.DecodeRuneInString(s.comment)
 	return r == q
 }
 
@@ -592,12 +590,12 @@ Loop:
 			s.backup()
 			s.emit(tokenText)
 			return scanNewCommand
-		case s.isCommentToggle(r):
-			cobra.Tag("scan").Add("line", s.line).LogV("comment toggle")
+		case s.isComment(r):
+			cobra.Tag("scan").Add("line", s.line).LogV("eol comment")
 			s.backup()
 			s.emit(tokenText)
 			s.next()
-			s.emit(tokenToggleComment)
+			s.emit(tokenComment)
 			// scanCommentToggle(s)
 		case isEndOfFile(r):
 			cobra.Tag("scan").Add("line", s.line).LogV("eof encountered")
@@ -683,15 +681,16 @@ func scanNewCommand(s *scanner) ƒ {
 		s.emit(tokenSysCmdStart)
 		cmdName := scanName(s)
 
-		if cmdName == "init.begin" {
+		switch cmdName:
+		case "init.begin":
 			s.init = true
 			// s.setParScanOff()
-		}
-
-		if cmdName == "init.end" {
+		case "init.end":
 			s.init = false
 			// s.setParScanOn()
 		}
+
+
 
 		r = s.next()
 		if r != ')' {
@@ -719,11 +718,11 @@ func scanNewCommand(s *scanner) ƒ {
 		// s.jumpNextRune()
 		// s.eatSpaces()
 		return scanStart
-	case r == '|':
-		cobra.Tag("scan").Add("line", s.line).LogV("line comment")
-		s.next()
-		s.emit(tokenEOLComment)
-		return scanText
+	// case r == '|':
+	// 	cobra.Tag("scan").Add("line", s.line).LogV("line comment")
+	// 	s.next()
+	// 	s.emit(tokenEOLComment)
+	// 	return scanText
 		// return scanEolComment
 	case isHSpace(r) || isEndOfLine(r) || isEndOfFile(r):
 		return s.errorf("unnamed command")
@@ -799,9 +798,9 @@ func scanFullCmd(s *scanner) ƒ {
 		case r == '}':
 			s.emit(tokenRightCurly)
 			return s.exitTextBlock()
-		case s.isCommentToggle(r):
+		case s.isComment(r):
 			// s.backup()
-			s.emit(tokenToggleComment)
+			s.emit(tokenComment)
 			// scanCommentToggle(s)
 		case isHSpace(r) || isEndOfLine(r):
 			s.eatSpaces()
@@ -839,8 +838,8 @@ func scanName(s *scanner) string {
 		switch r := s.next(); {
 		case isAlphaNumeric(r) || r == '_' || r == '.' || r == '-' || r == '*':
 			continue
-		case s.isCommentToggle(r):
-			s.emit(tokenToggleComment)
+		case s.isComment(r):
+			s.emit(tokenComment)
 			// scanCommentToggle(s)
 		default:
 			alt := false
@@ -877,19 +876,19 @@ func scanRunes(s *scanner) {
 }
 
 // Scan comments that terminate at the end of the line.
-func scanEolComment(s *scanner) ƒ {
-	eol := strings.Index(s.input[s.pos:], "\n")
+// func scanEolComment(s *scanner) ƒ {
+// 	eol := strings.Index(s.input[s.pos:], "\n")
 
-	if eol == -1 {
-		// end of file.
-		s.jump(len(s.input[s.pos:]))
-		return scanText
-	}
+// 	if eol == -1 {
+// 		// end of file.
+// 		s.jump(len(s.input[s.pos:]))
+// 		return scanText
+// 	}
 
-	s.jump(len("|") + eol)
+// 	s.jump(len("|") + eol)
 
-	return scanText
-}
+// 	return scanText
+// }
 
 // ----------------------------------------------------------------------------
 // Utilities ------------------------------------------------------------------

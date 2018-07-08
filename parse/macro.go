@@ -43,24 +43,25 @@ func NewMacroMap() MacroMap {
 
 	// Default macros
 	macs := []*Macro{
+		// System Macros
 		NewMacro("sys.newmacro", "", []string{"def"}, nil),
 		NewMacro("sys.newmacrof", "", []string{"def"}, nil),
 		NewMacro("sys.config", "", []string{"configs"}, nil),
 		NewMacro("sys.configf", "", []string{"configs"}, nil),
 		NewMacro("sys.init.begin", "", nil, nil),
 		NewMacro("sys.init.end", "", nil, nil),
-		NewMacro("subtext", "subtext, version 0.0.1", nil, nil),
-		NewBlockMacro("Subtext", "subtext, version 0.0.1", nil, nil),
-		// m.Block = true
-		// NewMacro("paragraph.begin", "\n", []string{"orig"}, nil),
-		// NewMacro("paragraph.end", "\n", []string{"orig"}, nil),
-		NewMacro("paragraph.begin", "<", nil, nil),
-		NewMacro("paragraph.end", ">\n", nil, nil),
-		// Test data macros
+		NewMacro("sys.exec", "", []string{"template"}, nil),
+		NewMacro("sys.import", "", nil, nil),
+		NewMacro("sys.incr", "", []string{"key"}, []*Optional{NewOptional("amount", "1")}),
 		NewMacro("sys.setdata", "", []string{"data"}, nil),
 		NewMacro("sys.setdataf", "", []string{"data"}, nil),
-		NewMacro("sys.exec", "", []string{"template"}, nil),
-		NewMacro("sys.incr", "", []string{"key"}, []*Optional{NewOptional("amount", "1")}),
+		// Regular macros
+		NewMacro("echo", "((.text))", []string{"text"}, nil),
+		NewBlockMacro("Echo", "((.text))", []string{"text"}, nil),
+		NewMacro("paragraph.begin", "<", nil, nil),
+		NewMacro("paragraph.end", ">\n", nil, nil),
+		NewMacro("subtext", "subtext, version 0.0.1", nil, nil),
+		NewBlockMacro("Subtext", "subtext, version 0.0.1", nil, nil),
 	}
 
 	mt := MacroType{Name: "", Format: ""}
@@ -77,7 +78,6 @@ func NewMacroMap() MacroMap {
 func (m MacroMap) GetMacro(name, format string) *Macro {
 	mt := MacroType{name, format}
 	mac, found := m[mt]
-
 	if found {
 		return mac
 	}

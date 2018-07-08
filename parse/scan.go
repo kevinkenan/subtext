@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+	"io/ioutil"
 )
 
 // ----------------------------------------------------------------------------
@@ -116,25 +117,31 @@ const (
 // Loc is a byte location in the input string.
 type Loc int
 
-// scanner represents the current state.
-type scanner struct {
+type scanFile struct {
 	name          string     // name of the doc being scanned
 	input         string     // the string being scanned
+	pos           Loc        // current position in the input
+	start         Loc        // start position of this item
+	line          int        // number of newlines seen (starts at 1)
+}
+
+// scanner represents the current state.
+type scanner struct {
+	*scanFile                 // the current file being scanned
+	fileStack    []*scanFile // stack of files waiting for scans
 	cmdH          string     // rune indicating a horizontal-mode command
 	cmdV          string     // rune indicating a vertical-mode command
 	comment       string     // rune indicating EOL comment
 	parCmd        string     // rune indicating a paragraph command
-	pos           Loc        // current position in the input
-	start         Loc        // start position of this item
 	width         Loc        // width of last rune read from input
 	tokens        chan token // channel of scanned tokens
 	cmdDepth      int        // nesting depth of commands
 	altTerm       bool       // true if '*}' terminates a text block
 	init          bool       // true if in init mode
-	line          int        // number of newlines seen (starts at 1)
 	// cmdStack indicates if a command's text block was called from within a
 	// full command (with a context) or from a short command.
 	cmdStack           []*cmdAttrs
+	insideComment      bool
 	parMode            bool // true when the scanner is invoked with scan instead of scanPlain
 	diableParScanFlags bool // when true, the scanner ignores ¶ commands
 	parScannerOn       bool // when true, the scanner generates paragraph commands
@@ -146,15 +153,26 @@ type scanner struct {
 }
 
 func NewScanner(name, input string) *scanner {
+	// fs := fileScan{
+	// 	name:  name,
+	// 	input: input,
+	// 	line:  1,
+	// }
 	return &scanner{
-		name:          name,
-		input:         input,
+		scanFile:       &scanFile{
+							name:  name,
+							input: input,
+							line:  1,
+						},
+		fileStack:     []*scanFile{},
+		// name:          name,
+		// input:         input,
 		cmdH:          "•",
 		cmdV:          "§",
 		comment:       "◊",
 		parCmd:        "¶",
 		tokens:        make(chan token),
-		line:          1,
+		// line:          1,
 		parMode:       true,
 		parScannerOn:  true,
 		parScanFlag:   true,
@@ -218,6 +236,20 @@ func (s *scanner) run() {
 	}
 	close(s.tokens)
 	cobra.Tag("scan").LogV("done scanning")
+}
+
+func (s *scanner) pushScanFile(sf *scanFile) {
+	s.fileStack = append(s.fileStack, sf)
+}
+
+func (s *scanner) popScanFile() *scanFile {
+	l := len(s.fileStack)
+	if l == 0 {
+		panic(s.errorf("attempted to read past the end of the fileStack"))
+	}
+	sf := s.fileStack[l-1]
+	s.fileStack = s.fileStack[:l-1]
+	return sf
 }
 
 func (s *scanner) isParScanAllowed() bool {
@@ -482,11 +514,17 @@ func (s *scanner) emitRawToken(t tokenType) {
 // emit only emits a text token if there is pending text. Other tokens are
 // emitted as is.
 func (s *scanner) emit(t tokenType) {
-	switch {
-	case t == tokenText:
+	switch t {
+	case tokenText:
 		if s.start < s.pos {
 			s.emitRawToken(t)
 		}
+	case tokenComment:
+		s.insideComment = true
+		s.emitRawToken(t)
+	case tokenLineBreak, tokenEOF:
+		s.insideComment = false
+		s.emitRawToken(t)
 	default:
 		s.emitRawToken(t)
 	}
@@ -602,6 +640,18 @@ Loop:
 			if s.cmdDepth > 0 {
 				s.errorf("end of file while command is still open")
 			}
+			cobra.Tag("scan").LogV("finishing scanText")
+			if s.pos > s.start {
+				cobra.Tag("scan").Add("line", s.line).LogV("flushing token buffer (tokens)")
+				s.emit(tokenText)
+			}
+			if len(s.fileStack) > 0 {
+				s.ignore()
+				cobra.Tag("scan").Add("name", s.name).LogV("closing scan file")
+				s.scanFile = s.popScanFile()
+				cobra.Tag("scan").Add("name", s.name).LogV("returning to scan file")
+				return scanText
+			}
 			break Loop
 		default:
 			cobra.Tag("scan").Add("line", s.line).Strunc("char", string(r)).LogfV("still scanning text")
@@ -609,17 +659,6 @@ Loop:
 			// return s.errorf("unexpected character %q while scanning text", r)
 		}
 	}
-
-	cobra.Tag("scan").LogV("finishing scanText")
-
-	if s.pos > s.start {
-		// if s.isParScanOn() {
-		// 	s.insertParagraphBeginCmd()
-		// }
-		cobra.Tag("scan").Add("line", s.line).LogV("flushing token buffer (tokens)")
-		s.emit(tokenText)
-	}
-
 	s.emit(tokenEOF)
 	cobra.Tag("scan").WithField("name", s.name).Add("line", s.line).LogV("completed scan")
 	return nil
@@ -646,7 +685,7 @@ func scanCommentToggle(s *scanner) {
 //   * full:   •cmd[context]
 // A system command has the same form, but the name is in parantheses: •(cmd)...
 func scanNewCommand(s *scanner) ƒ {
-	// input:  •cmd[...]
+	// input:   •cmd[...]
 	// s.pos:  ^
 	cobra.Tag("scan").Add("line", s.line).LogV("scanNewCommand")
 	cr := s.next()
@@ -673,6 +712,46 @@ func scanNewCommand(s *scanner) ƒ {
 
 		cobra.Tag("scan").LogV("done scanning bare command")
 		return scanText
+	case r == '&':
+		cobra.Tag("scan").LogV("import file")
+		s.next()
+		if s.insideComment {
+			break
+		}
+
+		if r = s.next(); r != '(' {
+			return s.errorf("illegal character, %q, found at start of file import", r)
+		}
+		s.ignore()
+
+		fn := scanFileName(s)
+
+		if r = s.next(); r != ')' {
+			return s.errorf("illegal character, %q, found at end of file import", r)
+		}
+		s.ignore()
+
+		if s.peek() == '%' {
+			s.next()
+			s.emit(tokenSpaceEater)
+		}
+
+		in, err := ioutil.ReadFile(fn)
+		if err != nil {
+			return s.errorf("unable to read file %q", fn)
+		}
+
+		sf := &scanFile{
+			name:          fn,
+			input:         string(in),
+			line:          1,
+		}
+
+		cobra.Tag("scan").Add("name", fn).LogV("opening new file")
+		s.pushScanFile(s.scanFile)
+		s.scanFile = sf
+
+		return scanStart
 	case r == '(':
 		cobra.Tag("scan").LogV("system command")
 		s.next()
@@ -681,22 +760,18 @@ func scanNewCommand(s *scanner) ƒ {
 		s.emit(tokenSysCmdStart)
 		cmdName := scanName(s)
 
-		switch cmdName:
-		case "init.begin":
-			s.init = true
-			// s.setParScanOff()
-		case "init.end":
-			s.init = false
-			// s.setParScanOn()
-		}
-
-
-
 		r = s.next()
 		if r != ')' {
 			return s.errorf("illegal character, %q, found in system command", r)
 		}
 		s.ignore()
+
+		switch cmdName {
+		case "init.begin":
+			s.init = true
+		case "init.end":
+			s.init = false
+		}
 
 		switch s.peek() {
 		case '[':
@@ -833,6 +908,25 @@ func scanCmdFlags(s *scanner) {
 }
 
 // scanName creates a name token.
+func scanFileName(s *scanner) string {
+	for {
+		switch r := s.next(); {
+		// case isAlphaNumeric(r) || r == '_' || r == '.' || r == '-' || r == '*':
+		// 	continue
+		case s.isComment(r):
+			s.emit(tokenComment)
+		case r == ')':
+			s.backup()
+			name := s.input[s.start:s.pos]
+			s.ignore()
+			cobra.Tag("scan").Add("line", s.line).WithField("name", name).LogfV("read file name")
+			return name
+		case isEndOfFile(r):
+			s.errorf("encountered end of file while reading file name")
+		}
+	}
+}
+
 func scanName(s *scanner) string {
 	for {
 		switch r := s.next(); {
@@ -854,8 +948,8 @@ func scanName(s *scanner) string {
 				name = strings.TrimSuffix(name, "*")
 			}
 
-			s.emitInsertedToken(tokenName, name)
 			s.altTerm = alt
+			s.emitInsertedToken(tokenName, name)
 			return name
 		}
 	}
@@ -929,7 +1023,6 @@ func (s *scanner) exitTextBlock() (f ƒ) {
 	} else { // short command
 		s.cmdDepth -= 1
 		cobra.Tag("scan").Tag("scan").LogV("done scanning short command")
-
 		if s.peek() == '%' {
 			s.next()
 			s.emit(tokenSpaceEater)

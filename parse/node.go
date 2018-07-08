@@ -287,7 +287,7 @@ type Text struct {
 }
 
 func NewTextNode(t string) *Text {
-	cobra.Tag("node").LogfV("text")
+	cobra.Tag("node").Strunc("val", t).LogfV("text")
 	return &Text{NodeType: nText, NodeValue: NodeValue(t)}
 }
 

@@ -251,6 +251,7 @@ func (r *Render) processSysCmd(n *parse.Cmd) string {
 		r.increment(n)
 	case "sys.exec":
 		out = r.exec(n)
+	case "sys.import":
 	default:
 		panic(RenderError{message: fmt.Sprintf("Line %d: unknown system command: %q", n.GetLineNum(), name)})
 	}
@@ -334,7 +335,7 @@ func (r *Render) increment(n *parse.Cmd) {
 	ctrs := parse.Data["ctr"].(map[interface{}]interface{})
 	v, _ :=strconv.Atoi("1")
 	keyName := strings.TrimPrefix(args["key"].String(), ".data.ctr.")
-	fmt.Println(keyName)
+
 	keyVal, found := ctrs[keyName].(int)
 	if !found {
 		panic(RenderError{message: fmt.Sprintf("Line %d: unable to find key %q to increment", n.GetLineNum(), keyName)})

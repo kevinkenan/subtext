@@ -311,8 +311,7 @@ func (p *parser) parseParagraph(t *token) (nl NodeList) {
 	// pkt := p.peek().typeof
 	lb := false
 
-	// Eat empty space
-loop:
+loop: // eat empty space
 	for {
 		switch p.peek().typeof {
 		case tokenComment:

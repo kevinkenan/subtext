@@ -4,7 +4,7 @@ import (
 	"fmt"
 	// "os"
 	"strings"
-	"strconv"
+	// "strconv"
 	// "text/template"
 	"github.com/kevinkenan/cobra"
 	"github.com/kevinkenan/subtext/parse"
@@ -47,52 +47,13 @@ type Render struct {
 	macros        parse.MacroMap
 }
 
-// func NewRenderEngine(d *Document) *Render {
-// 	return new(Render{Document: d})
-// }
-
 func NewDoc() *Document {
 	d := Document{macrosIn: []*parse.Macro{}}
-	// d.AddParagraphMacros()
 	return &d
 }
 
-// func NewDoc() *Document {
-// 	var m *parse.Macro
-// 	// var opt parse.Optional
-// 	// macs := make(map[string]*parse.Macro)
-// 	opt := parse.Optional{Name: "second", Default: "def"}
-// 	d := Document{macros: make(map[string]*parse.Macro)}
-// 	m = parse.NewMacro("a", "<it>{{- .first -}}</it>{{.second}}", []string{"first"}, []*parse.Optional{&opt})
-// 	d.macros[m.Name] = m
-// 	m = parse.NewMacro("b", "<b>{{.first}}</b>", []string{"first"}, nil) //[]*Optional{&opt})
-// 	d.macros[m.Name] = m
-// 	m = parse.NewMacro("c", "<sc>{{.first}}</sc>", []string{"first"}, nil) //[]*Optional{&opt})
-// 	d.macros[m.Name] = m
-// 	m = parse.NewMacro("section", "<section>{{.first}}\n</section>", []string{"first"}, nil) //[]*Optional{&opt})
-// 	d.macros[m.Name] = m
-// 	// m = parse.NewMacro("begin", "•b{test}<body>\n•^(pm=on)", []string{"first"}, nil) //[]*Optional{&opt})
-// 	m = parse.NewMacro("begin", "<body>\n•b{test}\n", []string{"first"}, nil) //[]*Optional{&opt})
-// 	d.macros[m.Name] = m
-// 	// m = parse.NewMacro("end", "\n</body>•^(pm=off)•-\n", []string{"first"}, nil) //[]*Optional{&opt})
-// 	m = parse.NewMacro("end", "\n</body>\n", []string{"first"}, nil) //[]*Optional{&opt})
-// 	d.macros[m.Name] = m
-// 	return &d
-// }
-
 func (d *Document) AddMacro(m *parse.Macro) {
 	d.macrosIn = append(d.macrosIn, m)
-}
-
-func (d *Document) AddParagraphMacros() {
-	// Add sys.paragraph.* macros which are used when paragraph mode is off.
-	d.AddMacro(parse.NewMacro("sys.paragraph.begin", "{{.parbreak}}", []string{"parbreak"}, nil))
-	d.AddMacro(parse.NewMacro("sys.paragraph.end", "{{.parbreak}}", []string{"parbreak"}, nil))
-	// d.AddMacro(parse.NewMacro("paragraph.begin", "<p>", []string{"orig"}, nil))
-	// d.AddMacro(parse.NewMacro("paragraph.end", "</p>\n", []string{"orig"}, nil))
-	// Add paragraph.* macros which are used when paragraph mode is on.
-	d.AddMacro(parse.NewMacro("paragraph.begin", "", nil, []*parse.Optional{parse.NewOptional("ignore", "")}))
-	d.AddMacro(parse.NewMacro("paragraph.end", "\n\n", nil, []*parse.Optional{parse.NewOptional("ignore", "")}))
 }
 
 func (d *Document) Make() (s string, err error) {
@@ -101,7 +62,7 @@ func (d *Document) Make() (s string, err error) {
 	return
 }
 
-// MakeWidth allows arbitrary text to be processed with an existing Render
+// MakeWith allows arbitrary text to be processed with an existing Render
 // context. Most of the time the Document's Make is used (which calls
 // MakeWith), but MakeWith itself is useful for handling macros embedded in
 // templates.
@@ -220,8 +181,6 @@ func (r *Render) processSysCmd(n *parse.Cmd) string {
 		r.setData(n, true)
 	case "sys.setdata":
 		r.setData(n, false)
-	case "sys.incr":
-		r.increment(n)
 	case "sys.exec":
 		out = r.exec(n)
 	case "sys.import":
@@ -289,38 +248,6 @@ func (r *Render) exec(n *parse.Cmd) string {
 		cobra.Tag("cmd").LogfV("end exec")
 		return outs
 	}
-}
-
-func (r *Render) increment(n *parse.Cmd) {
-	cobra.Tag("cmd").LogfV("begin incr")
-	name := "sys.incr"
-
-	d := r.macros.GetMacro(name, r.Options.Format)
-	if d == nil {
-		panic(RenderError{message: fmt.Sprintf("Line %d: system command %q not defined.", n.GetLineNum(), name)})
-	}
-
-	args, err := d.ValidateArgs(n)
-	if err != nil {
-		panic(RenderError{message: fmt.Sprintf("Line %d: ValidateArgs failed on system command %q: %q", n.GetLineNum(), name, err)})
-	}
-
-	// data := parse.Data["data"].(map[string]interface{})
-	ctrs := parse.Data["ctr"].(map[interface{}]interface{})
-	v, _ :=strconv.Atoi("1")
-	keyName := strings.TrimPrefix(args["key"].String(), ".data.ctr.")
-
-	keyVal, found := ctrs[keyName].(int)
-	if !found {
-		panic(RenderError{message: fmt.Sprintf("Line %d: unable to find key %q to increment", n.GetLineNum(), keyName)})
-	}
-
-	keyVal += v
-	ctrs[keyName] = keyVal
-	parse.Data["ctrs"] = ctrs
-
-	cobra.Tag("cmd").LogfV("end incr")
-	return
 }
 
 func (r *Render) setData(n *parse.Cmd, flowStyle bool)  {

@@ -46,6 +46,8 @@ func (nt NodeValue) String() string {
 
 // Peek -----------------------------------------------------------------------
 
+// TODO: Remove Peek as it is no longer used.
+
 type Peek struct {
 	next Node
 	prev Node

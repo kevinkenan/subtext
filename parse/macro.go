@@ -52,7 +52,6 @@ func NewMacroMap() MacroMap {
 		NewMacro("sys.init.end", "", nil, nil),
 		NewMacro("sys.exec", "", []string{"template"}, nil),
 		NewMacro("sys.import", "", nil, nil),
-		NewMacro("sys.incr", "", []string{"key"}, []*Optional{NewOptional("amount", "1")}),
 		NewMacro("sys.setdata", "", []string{"data"}, nil),
 		NewMacro("sys.setdataf", "", []string{"data"}, nil),
 		// Regular macros

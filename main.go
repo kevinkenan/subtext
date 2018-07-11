@@ -19,102 +19,6 @@ import (
 	// "github.com/kevinkenan/gohtml"
 )
 
-// func render(root *parse.Section, d *doc) string {
-// 	s := new(strings.Builder)
-// 	// c := make(chan parse.Node)
-// 	// go root.Walk(c, func(n *parse.NodeList){w.WriteString(fmt.Sprintf("<here%s|", n.GetValue()))})
-// 	s.WriteString("<body>")
-// 	s.WriteString(renderNode(root, d))
-// 	s.WriteString("</body>")
-// 	return s.String()
-// }
-
-// func renderNode(n parse.Node, d *doc) string {
-// 	s := new(strings.Builder)
-// 	switch n.(type) {
-// 	case *parse.Section:
-// 		s.WriteString(renderSection(n.(*parse.Section), d))
-// 	case *parse.Text:
-// 		s.WriteString(n.(*parse.Text).GetText())
-// 	case *parse.ErrorNode:
-// 		s.WriteString(n.(*parse.ErrorNode).GetErrorMsg())
-// 	case *parse.Cmd:
-// 		s.WriteString(processMacro(n.(*parse.Cmd), d))
-// 	case *parse.Paragraph:
-// 		s.WriteString("</p>\n<p>")
-// 	default:
-// 		panic(fmt.Sprintf("unexpected node %q\n", n))
-// 	}
-// 	return s.String()
-// }
-
-// func renderSection(n *parse.Section, d *doc) string {
-// 	s := new(strings.Builder)
-// 	for _, l := range n.NodeList {
-// 		s.WriteString(renderNode(l, d))
-// 	}
-// 	return s.String()
-// }
-
-// func renderNodeList(n parse.NodeList, d *doc) string {
-// 	s := new(strings.Builder)
-// 	for _, l := range n {
-// 		s.WriteString(renderNode(l, d))
-// 	}
-// 	return s.String()
-// }
-
-// func processMacro(n *parse.Cmd, d *doc) string {
-// 	// s := new(strings.Builder)
-// 	name := n.GetCmdName()
-// 	m := d.macros[name]
-// 	args, err := m.ValidateArgs(n)
-// 	renArgs := map[string]string{}
-// 	for k, v := range args {
-// 		renArgs[k] = renderNodeList(v, d)
-// 	}
-// 	s, err := m.Execute(renArgs)
-// 	if err != nil {
-// 		panic(fmt.Sprintf("%s: %s", name, err))
-// 	}
-// 	return s
-// }
-
-// const test_temp = "Name: •sc{ {{- .Name -}} }\nAge: {{.Age}}\nHometown: {{.Hometown}}\n"
-
-// type test_t struct {
-// 	Name, Age, Hometown string
-// }
-
-// func runTempTest() {
-// 	// vals := test_t{Name: "Kevin Kenan", Age: "22", Hometown: "Eugene",}
-// 	val2 := map[string]string{"Name": "Kevin Kenan", "Age": "22", "Hometown": "Eugene",}
-// 	t := template.Must(template.New("test_temp").Parse(test_temp))
-
-// 	err := t.Execute(os.Stdout, val2)
-// 	if err != nil {
-// 		fmt.Println("executing template:", err)
-// 	}
-// }
-
-// type doc struct {
-// 	macros map[string]*parse.Macro
-// }
-
-// func NewDoc() *doc {
-// 	var m *parse.Macro
-// 	// var opt parse.Optional
-// 	// macs := make(map[string]*parse.Macro)
-// 	opt := parse.Optional{Name: "second", Default: "def"}
-// 	d := doc{make(map[string]*parse.Macro)}
-// 	m = parse.NewMacro("a", "<it>{{- .first -}}</it>{{.second}}", []string{"first"}, []*parse.Optional{&opt})
-// 	d.macros[m.Name] = m
-// 	m = parse.NewMacro("b", "<b>{{.first}}</b>", []string{"first"}, nil) //[]*Optional{&opt})
-// 	d.macros[m.Name] = m
-// 	m = parse.NewMacro("c", "<sc>{{.first}}</sc>", []string{"first"}, nil) //[]*Optional{&opt})
-// 	d.macros[m.Name] = m
-// 	return &d
-// }
 
 func AppMain(c *cobra.Command, s []string) error {
 	cobra.Out("subtext says hello")
@@ -148,15 +52,11 @@ func MakeCmd(cmd *cobra.Command, args []string) error {
 			if err != nil {
 				return err
 			}
-			input = in
+			input = append(input, in...)
 		}
 	}
 	d := document.NewDoc()
 	d.Name = name
-	// d.ParagraphMode = viper.GetBool("paragraph_mode")
-	// if viper.GetBool("paragraph_mode") {
-	// 	d.AddParagraphMacros()
-	// }
 	d.Output = cobra.GetString("output")
 	d.Packages = cobra.GetStringSlice("packages")
 	d.Options = &parse.Options{
@@ -166,21 +66,23 @@ func MakeCmd(cmd *cobra.Command, args []string) error {
 		Macros: *new(parse.MacroMap),
 	}
 	d.Text = string(input)
-	// macmap := new(parse.MacroMap)
-	// d.AddMacro(parse.NewMacro("paragraph.begin", "<p>", []string{"orig"}, nil))
-	// d.AddMacro(parse.NewMacro("paragraph.end", "</p>\n\n", []string{"orig"}, nil))
-	// d.AddMacro(parse.NewMacro("title", "<h1>{{.text}}</h1>\n\n", []string{"text"}, nil))
-	// d.AddMacro(parse.NewMacro("section", "<h2>{{.text}}</h2>\n\n", []string{"text"}, nil))
-	// d.AddMacro(parse.NewMacro("emph", "<i>{{.text}}</i>", []string{"text"}, nil))
-	// d.AddMacro(parse.NewMacro("chapter", "<chapter>\n\n¶+{{.text}}\n\n¶-</chapter>\n", []string{"text"}, nil))
-	// d.AddMacro(parse.NewMacro("sys.newmacro", "", []string{"def"}, nil))
-	// d.AddMacro(parse.NewMacro("sys.config", "", []string{"configs"}, nil))
 	output, err := d.Make()
 	if err != nil {
 		return err
 	}
 	cobra.Log("make complete")
-	fmt.Print(output)
+	if d.Output == "-" {
+		fmt.Print(output)
+	} else {
+		f, err := os.Create(d.Output)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
+		f.WriteString(output)
+		f.Sync()
+	}
 	// for _, pkg := range d.Packages {
 	// 	fmt.Println(pkg)
 	// }
@@ -302,8 +204,21 @@ func init() {
 	make.Short = "create a new document"
 	make.RunE = MakeCmd
 	make.AddFlags(
-		cobra.NewStringFlag("output", cobra.Opts().Abbr("o").Default("-").Desc("filesystem path of the output file")),
+		cobra.NewStringFlag("output", cobra.Opts().Abbr("o").Default("-").Desc("path to the output file")),
 		cobra.NewBoolFlag("plain", cobra.Opts().Default(false).Desc("process the text in plain mode")),
+		cobra.NewBoolFlag("reflow", cobra.Opts().Default(false).Desc("reflow paragraphs")),
+		cobra.NewStringFlag("format", cobra.Opts().Desc("the output format")),
+		cobra.NewStringSliceFlag("packages", cobra.Opts().Abbr("p").Desc("macro package(s) to apply to input")))
+
+	build := cobra.NewCommand("build")
+	build.Short = "create a site"
+	build.Long = `Copies the contents from the specified to directory to the output directory,
+processing subtext files as it goes.
+`
+	build.RunE = BuildCmd
+	build.AddFlags(
+		cobra.NewStringFlag("output", cobra.Opts().Abbr("o").Req(true).Desc("path to the output directory")),
+		cobra.NewBoolFlag("recurse", cobra.Opts().Default(false).Desc("includes contents of subdirectories")),
 		cobra.NewBoolFlag("reflow", cobra.Opts().Default(false).Desc("reflow paragraphs")),
 		cobra.NewStringFlag("format", cobra.Opts().Desc("the output format")),
 		cobra.NewStringSliceFlag("packages", cobra.Opts().Abbr("p").Desc("macro package(s) to apply to input")))
@@ -314,7 +229,7 @@ func init() {
 
 	// command structure
 	root := cobra.Init(app, cfg)
-	root.SubCmds(make, walk)
+	root.SubCmds(make, walk, build)
 
 	cobra.OnInitialize(subtextInit)
 }

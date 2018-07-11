@@ -422,6 +422,8 @@ type Cmd struct {
 	Peek
 	SysCmd bool // true if the command is a system command.
 	Block  bool // true if the command is a block
+	Series bool // true if the command is a serial command
+	Format string // the parse format at the time the cmd was created
 }
 
 type Arguments struct {

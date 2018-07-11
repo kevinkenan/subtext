@@ -138,6 +138,7 @@ type scanner struct {
 	cmdDepth      int        // nesting depth of commands
 	altTerm       bool       // true if '*}' terminates a text block
 	init          bool       // true if in init mode
+	skipConfig    bool
 	// cmdStack indicates if a command's text block was called from within a
 	// full command (with a context) or from a short command.
 	cmdStack           []*cmdAttrs
@@ -550,11 +551,34 @@ type ƒ func(*scanner) ƒ
 
 func scanStart(s *scanner) ƒ {
 	cobra.Tag("scan").LogV("scanStart")
+
+	if s.input[:3] == ">>>" {
+		s.scanConfig()
+	}
+
 	s.acceptRun(hSpaceChars)
+
 	if s.pos > s.start {
 		s.emitEmptyLine()
 	}
+
 	return scanText
+}
+
+func (s *scanner) scanConfig() (err error) {
+	cend := strings.Index(s.input, "---\n")
+
+	if cend == -1 {
+		return fmt.Errorf("missing end to config block")
+	}
+
+	if s.skipConfig {
+		s.line = 1 + strings.Count(s.input[:cend], "\n")
+		s.start = Loc(cend + len("---\n"))
+		return
+	}
+
+	return nil
 }
 
 func scanText(s *scanner) ƒ {
@@ -715,8 +739,9 @@ func scanNewCommand(s *scanner) ƒ {
 	case r == '&':
 		cobra.Tag("scan").LogV("import file")
 		s.next()
+
 		if s.insideComment {
-			break
+			return scanText
 		}
 
 		if r = s.next(); r != '(' {

@@ -6,6 +6,7 @@ import (
 	// "unicode"
 	// "unicode/utf8"
 	"github.com/kevinkenan/cobra"
+	"gopkg.in/yaml.v2"
 )
 
 // Parse creates a node tree from the tokens produced by scan.
@@ -18,6 +19,7 @@ func Parse(name, input string, options *Options) (*Section, MacroMap, error) {
 		empty:   true,
 		macros:  NewMacroMap(),
 		reflow:  options.Reflow,
+		format:  options.Format,
 	}
 
 	if options.Plain {
@@ -254,7 +256,11 @@ func (p *parser) parseComment() {
 
 func (p *parser) parseSpaceEater(t *token) {
 	cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("begin")
+	p.eatSpaces()
+	cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("end")
+}
 
+func (p *parser) eatSpaces() {
 	for {
 		switch p.next().typeof {
 		case tokenEmptyLine, tokenIndent, tokenLineBreak, tokenSpaceEater:
@@ -265,8 +271,6 @@ func (p *parser) parseSpaceEater(t *token) {
 			return
 		}
 	}
-
-	cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("end")
 }
 
 func (p *parser) parseEmptyLine(t *token, nl *NodeList) {
@@ -391,8 +395,9 @@ func (p *parser) makeTextNode(t *token) (*Text, int) {
 	return n, len(s)
 }
 
-func (p *parser) parseSysCmd(t *token, nl *NodeList) (err error) {
+func (p *parser) parseSysCmd(t *token, nl *NodeList) {
 	cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("begin")
+	var err error
 	p.insideSysCmd = true
 
 	_, cmd, err := p.makeCmd(t, nl)
@@ -405,9 +410,17 @@ func (p *parser) parseSysCmd(t *token, nl *NodeList) (err error) {
 		err = p.addNewMacro(cmd, true)
 	case "sys.newmacro":
 		err = p.addNewMacro(cmd, false)
+	case "sys.configf":
+		err = p.processSysConfigCmd(cmd, true)
+	case "sys.config":
+		err = p.processSysConfigCmd(cmd, false)
 	default:
 		*nl = append(*nl, cmd)
 		p.link(cmd)
+	}
+
+	if err != nil {
+		p.errorf(err.Error())
 	}
 
 	p.insideSysCmd = false
@@ -415,10 +428,10 @@ func (p *parser) parseSysCmd(t *token, nl *NodeList) (err error) {
 	return
 }
 
-func (p *parser) parseCmd(t *token, nl *NodeList) (cmd *Cmd, err error) {
+func (p *parser) parseCmd(t *token, nl *NodeList) (cmd *Cmd) {
 	par, cmd, err := p.makeCmd(t, nl)
 	if err != nil {
-		return
+		p.errorf(err.Error())
 	}
 
 	if par != nil {
@@ -427,7 +440,7 @@ func (p *parser) parseCmd(t *token, nl *NodeList) (cmd *Cmd, err error) {
 
 	*nl = appendNode(*nl, cmd)
 
-	if cmd.Block && p.parScanOn {
+	if cmd.Series || (cmd.Block && p.parScanOn) {
 		p.blockSpaceEater()
 	}
 
@@ -467,16 +480,16 @@ func (p *parser) makeCmd(t *token, nl *NodeList) (par, cmd *Cmd, err error) {
 	case tokenComment:
 		p.parseComment()
 	case tokenLeftSquare:
-		par = p.parseCmdContext(cmd)
+		par, err = p.parseCmdContext(cmd)
 	case tokenLeftCurly:
-		par, err = p.initCmd(cmd)
+		par = p.initCmd(cmd)
 		p.parseSimpleCmd(cmd)
 	}
 
 	return
 }
 
-func (p *parser) initCmd(c *Cmd) (par *Cmd, err error) {
+func (p *parser) initCmd(c *Cmd) (par *Cmd) {
 	name := c.GetCmdName()
 	cobra.WithField("name", name).LogV("parsing command (cmd)")
 
@@ -486,14 +499,17 @@ func (p *parser) initCmd(c *Cmd) (par *Cmd, err error) {
 	} else if f, ok := c.HasFlagVar("format"); ok {
 		format = f
 	}
+	cobra.Tag("parse").Add("format", p.format).LogV("set cmd format")
 
 	mac := p.macros.GetMacro(name, format)
 	if mac == nil {
-		err = fmt.Errorf("Line %d: command %q (format %q) not defined.", c.GetLineNum(), name, p.format)
+		p.errorf("Line %d: command %q (format %q) not defined.", c.GetLineNum(), name, p.format)
 		return
 	}
 
+	c.Format = format
 	c.Block = mac.Block
+	c.Series = mac.Series
 
 	if !p.insideSysCmd && p.parScanOn && !p.insidePar && !c.Block {
 		p.insidePar = true
@@ -551,7 +567,7 @@ func (p *parser) assembleText() NodeList {
 	}
 }
 
-func (p *parser) parseCmdContext(m *Cmd) (par *Cmd) {
+func (p *parser) parseCmdContext(m *Cmd) (par *Cmd, err error) {
 	cobra.Tag("parse").LogV("parsing cmd context")
 	t := p.nextIf(tokenLeftSquare)
 	t = p.peek()
@@ -560,10 +576,7 @@ func (p *parser) parseCmdContext(m *Cmd) (par *Cmd) {
 		p.parseCmdFlags(m)
 	}
 
-	par, err := p.initCmd(m)
-	if err != nil {
-		// TODO: Handle error
-	}
+	par = p.initCmd(m)
 
 	parScanState := p.parScanOn
 	if m.Block {
@@ -708,6 +721,44 @@ func (p *parser) parseEOF(t *token, nl *NodeList) bool {
 
 	cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("end")
 	return true
+}
+
+func (p *parser) processSysConfigCmd(n *Cmd, flowStyle bool) error {
+	name := "sys.config"
+	// Retrieve the sys.newmacro system command
+	d := p.macros.GetMacro(name, "")
+	if d == nil {
+		return fmt.Errorf("Line %d: system command %q not defined.", n.GetLineNum(), name)
+	}
+	cobra.Tag("cmd").Strunc("macro", d.TemplateText).LogfV("retrieved system command definition")
+
+	args, err := d.ValidateArgs(n)
+	if err != nil {
+		return fmt.Errorf("Line %d: ValidateArgs failed on system command %q: %q", n.GetLineNum(), name, err)
+	}
+
+	cobra.Tag("cmd").Strunc("syscmd", args["configs"].String()).LogfV("system command: %s", args["configs"])
+
+	cfg := make(map[interface{}]interface{})
+	if flowStyle {
+		err = yaml.Unmarshal([]byte("{"+args["configs"].String()+"}"), &cfg)
+	} else {
+		err = yaml.Unmarshal([]byte(args["configs"].String()), &cfg)
+	}
+	if err != nil {
+		return fmt.Errorf("Line %d: unmarshall error for system command %q: %q", n.GetLineNum(), name, err)
+	}
+	cobra.Tag("cmd").LogfV("marshalled syscmd: %+v", cfg)
+
+	for k, v := range cfg {
+		cobra.Tag("cmd").Add("key", k).Add("val", v).LogV("setting config from sys command")
+		cobra.Set(k.(string), v)
+	}
+
+	p.reflow = cobra.GetBool("reflow")
+	p.format = cobra.GetString("format")
+
+	return nil
 }
 
 func (p *parser) errorf(format string, args ...interface{}) {

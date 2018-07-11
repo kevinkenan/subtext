@@ -80,14 +80,13 @@ func MakeWith(t string, r *Render, options *parse.Options) (s string, err error)
 	}()
 
 	root, macros, err := parse.Parse(r.Name, t, options)
-
 	if err != nil {
 		return "", err
-	} else {
-		r.macros = macros
-		cobra.LogV("rendering (render)")
-		return r.render(root), nil
 	}
+
+	r.macros = macros
+	cobra.LogV("rendering (render)")
+	return r.render(root), nil
 }
 
 func (r *Render) render(root *parse.Section) string {
@@ -164,15 +163,14 @@ func (r *Render) renderNodeList(n parse.NodeList) string {
 func (r *Render) processSysCmd(n *parse.Cmd) string {
 	out := ""
 	name := n.GetCmdName()
-	flowStyle := false
 	cobra.Tag("render").WithField("cmd", name).LogV("processing system command (cmd)")
 
 	switch name {
-	case "configf":
-		flowStyle = true
-		fallthrough
-	case "config":
-		r.handleSysConfigCmd(n, flowStyle)
+	// case "sys.configf":
+	// 	flowStyle = true
+	// 	fallthrough
+	// case "sys.config":
+	// 	r.handleSysConfigCmd(n, flowStyle)
 	case "sys.init.begin":
 		r.init = true
 	case "sys.init.end":
@@ -220,13 +218,13 @@ func (r *Render) exec(n *parse.Cmd) string {
 
 	// renArgs = map[string]interface{}{}
 	parse.Data["reflow"] = r.Options.Reflow
-	parse.Data["format"] = r.Options.Format
+	parse.Data["format"] = n.Format
 	parse.Data["plain"] = r.Options.Plain
 	parse.Data["flags"] = n.Flags
 	renArgs["data"] = parse.Data
 
 	// Apply the command's arguments to the macro.
-	s, err := r.ExecuteMacro(m, renArgs)
+	s, err := r.ExecuteMacro(m, renArgs, false)
 	if err != nil {
 		// fmt.Println(err)
 		panic(RenderError{fmt.Sprintf("error rendering macro %q: %s", name, err)})
@@ -254,7 +252,7 @@ func (r *Render) setData(n *parse.Cmd, flowStyle bool)  {
 	cobra.Tag("cmd").LogfV("begin setData")
 	name := "sys.setdata"
 	// Retrieve the sys.data system command
-	d := r.macros.GetMacro(name, r.Options.Format)
+	d := r.macros.GetMacro(name, "")
 	if d == nil {
 		panic(RenderError{message: fmt.Sprintf("Line %d: system command %q not defined.", n.GetLineNum(), name)})
 	}
@@ -285,87 +283,56 @@ func (r *Render) setData(n *parse.Cmd, flowStyle bool)  {
 	return
 }
 
-func (r *Render) handleSysConfigCmd(n *parse.Cmd, flowStyle bool) {
-	name := "sys.config"
-	// Retrieve the sys.newmacro system command
-	d := r.macros.GetMacro(name, r.Options.Format)
-	if d == nil {
-		panic(RenderError{message: fmt.Sprintf("Line %d: system command %q not defined.", n.GetLineNum(), name)})
-	}
-	cobra.Tag("cmd").Strunc("macro", d.TemplateText).LogfV("retrieved system command definition")
-
-	args, err := d.ValidateArgs(n)
-	if err != nil {
-		panic(RenderError{message: fmt.Sprintf("Line %d: ValidateArgs failed on system command %q: %q", n.GetLineNum(), name, err)})
-	}
-
-	cobra.Tag("cmd").Strunc("syscmd", args["configs"].String()).LogfV("system command: %s", args["configs"])
-
-	cfg := make(map[interface{}]interface{})
-	if flowStyle {
-		err = yaml.Unmarshal([]byte("{"+args["configs"].String()+"}"), &cfg)
-	} else {
-		err = yaml.Unmarshal([]byte(args["configs"].String()), &cfg)
-	}
-	if err != nil {
-		panic(RenderError{message: fmt.Sprintf("Line %d: unmarshall error for system command %q: %q", n.GetLineNum(), name, err)})
-	}
-	cobra.Tag("cmd").LogfV("marshalled syscmd: %+v", cfg)
-
-	for k, v := range cfg {
-		cobra.Tag("render").Add("key", k).Add("val", v).LogV("setting config from sys command")
-		cobra.Set(k.(string), v)
-	}
-
-	r.ReflowPars = cobra.GetBool("reflow")
-}
-
 func (r *Render) processCmd(n *parse.Cmd) string {
 	name := n.GetCmdName()
 	cobra.Tag("render").WithField("cmd", name).LogV("rendering command (cmd)")
 	cmdLog := cobra.Tag("cmd")
 
-	format := r.Options.Format
-	if n.HasFlag("noformat") {
-		format = ""
-	} else if f, ok := n.HasFlagVar("format"); ok {
-		format = f
-	}
-
 	// Get the macro definition.
-	m := r.macros.GetMacro(name, format)
+	m := r.macros.GetMacro(name, n.Format)
 	if m == nil {
 		panic(RenderError{message: fmt.Sprintf("Line %d: macro %q not defined.", n.GetLineNum(), name)})
 	}
 	cmdLog.Copy().Strunc("macro", m.TemplateText).LogfV("retrieved macro definition")
-
-	args, err := m.ValidateArgs(n)
-	if err != nil {
-		panic(RenderError{message: fmt.Sprintf("Line %d: ValidateArgs failed on macro %q: %q", n.GetLineNum(), name, err)})
-	}
-
-	// Load the validated args into a map for easy access.
-	renArgs := map[string]interface{}{}
-	for k, v := range args {
-		renArgs[k] = v.String()
-		cmdLog.Copy().Strunc("arg", k).Strunc("val", v).LogV("prepared command argument")
-	}
 	
+	renArgs := map[string]interface{}{}
 	parse.Data["reflow"] = r.Options.Reflow
-	parse.Data["format"] = r.Options.Format
+	parse.Data["format"] = n.Format
 	parse.Data["plain"] = r.Options.Plain
 	parse.Data["flags"] = n.Flags
 	renArgs["data"] = parse.Data
 
+	if m.InitTemplate != nil {
+		data := map[string]interface{}{}
+		data["data"] = parse.Data
+		_, err := r.ExecuteMacro(m, data, true)
+		if err != nil {
+			panic(RenderError{fmt.Sprintf("error executing init template %q: %s", name, err)})
+		}
+		cmdLog.Copy().Add("name", name).Add("ld", m.Ld).Logf("executed init macro")
+	}
+
+	args, err := m.ValidateArgs(n)
+	if err != nil {
+		panic(RenderError{message: fmt.Sprintf("Line %d: ValidateArgs failed on macro %q: %s", n.GetLineNum(), name, err)})
+	}
+
+	// Load the validated args into a map for easy access.
+	for k, v := range args {
+		renArgs[k] = r.renderNodeList(v)
+		// renArgs[k] = v.String()
+		cmdLog.Copy().Strunc("arg", k).Strunc("val", renArgs[k]).LogV("prepared command argument")
+	}
+
 	// Apply the command's arguments to the macro.
-	s, err := r.ExecuteMacro(m, renArgs)
+	s, err := r.ExecuteMacro(m, renArgs, false)
 	if err != nil {
 		panic(RenderError{fmt.Sprintf("error rendering macro %q: %s", name, err)})
 	}
 	cmdLog.Copy().Add("name", name).Add("ld", m.Ld).Logf("executed macro, ready for parsing")
 
 	// Handle commands embedded in the macro.
-	opts := &parse.Options{Plain: true, Macros: r.macros}
+	opts := &parse.Options{Plain: true, Macros: r.macros, Format: n.Format}
 	output, _, err := parse.Parse(name, s, opts)
 	if err != nil {
 		panic(RenderError{message: fmt.Sprintf("Line %d: error in template for macro %q: %q", n.GetLineNum(), name, err)})
@@ -381,9 +348,13 @@ func (r *Render) processCmd(n *parse.Cmd) string {
 	return outs
 }
 
-func (r *Render) ExecuteMacro( m *parse.Macro, data map[string]interface{}) (string, error) {
+func (r *Render) ExecuteMacro( m *parse.Macro, data map[string]interface{}, init bool) (string, error) {
 	s := strings.Builder{}
-	err := m.Template.Delims(m.Ld, m.Rd).Option("missingkey=error").Execute(&s, data)
+	t := m.Template
+	if init {
+		t = m.InitTemplate
+	}
+	err := t.Delims(m.Ld, m.Rd).Option("missingkey=error").Execute(&s, data)
 	if err != nil {
 		return "", err
 	}

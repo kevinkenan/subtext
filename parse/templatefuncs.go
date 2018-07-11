@@ -3,6 +3,8 @@ package parse
 import (
 	"fmt"
 	"strings"
+	"strconv"
+	"regexp"
 	"text/template"
 	"reflect"
 )
@@ -12,7 +14,18 @@ var funcMap = template.FuncMap{
 	"getdata": GetData,
 	"setdata": SetData,
 	"add": add,
+	"sub": sub,
+	"mul": mul,
+	"div": div,
+	"strlist": strlist,
+	"join": join,
 	"split": split,
+	"addsuffix": addsuffix,
+	"addprefix": addprefix,
+	"replaceall": replaceall,
+	"trimspace": trimspace,
+	"lower": lower,
+	"upper": upper,
 }
 
 func GetData(key string) (interface{}, error) {
@@ -269,12 +282,98 @@ func mod(b, a interface{}) (interface{}, error) {
 	}
 }
 
+type Stringer interface {
+	String() string
+}
+
+func strlist(ss []interface{}) ([]string, error) {
+	sl := []string{}
+
+	for _, s := range ss {
+		sv := reflect.ValueOf(s)
+
+		switch sv.Kind() {
+		case reflect.String:
+			sl = append(sl, s.(string))
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			sl = append(sl, strconv.FormatInt(sv.Int(), 10))
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			sl = append(sl, strconv.FormatUint(sv.Uint(), 10))
+		case reflect.Float32, reflect.Float64:
+			sl = append(sl, strconv.FormatFloat(sv.Float(), 'f', -1, 64))
+		case reflect.Bool:
+			sl = append(sl, strconv.FormatBool(sv.Bool()))
+		default:
+			switch s.(type) {
+			case Stringer:
+				sl = append(sl, s.(Stringer).String())
+			default:
+				return nil, fmt.Errorf("unknown type for %q (%T)", sv, s)
+			}
+		}
+	}
+
+	return sl, nil
+}
+
+func join(sep string, ss []string) string {
+	return strings.Join(ss, sep)
+}
+
+func addsuffix(suf string, ss []string) []string {
+	outs := []string{}
+	for _, s := range ss {
+		outs = append(outs, s + suf)
+	}
+	return outs
+}
+
+func addprefix(pre string, ss []string) []string {
+	outs := []string{}
+	for _, s := range ss {
+		outs = append(outs, pre + s)
+	}
+	return outs
+}
+
+// replaceall replaces all occurrences of a value in a string with the given
+// replacement value.
+func replaceall(f, t, s string) (string, error) {
+	return strings.Replace(s, f, t, -1), nil
+}
+
+// regexReplaceAll replaces all occurrences of a regular expression with
+// the given replacement value.
+func regexReplaceAll(re, pl, s string) (string, error) {
+	compiled, err := regexp.Compile(re)
+	if err != nil {
+		return "", err
+	}
+	return compiled.ReplaceAllString(s, pl), nil
+}
+
+// regexMatch returns true or false if the string matches
+// the given regular expression
+func regexMatch(re, s string) (bool, error) {
+	compiled, err := regexp.Compile(re)
+	if err != nil {
+		return false, err
+	}
+	return compiled.MatchString(s), nil
+}
+
+
 func split(sep, s string) ([]string, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return []string{}, nil
 	}
 	return strings.Split(s, sep), nil
+}
+
+// TrimSpace is a version of strings.TrimSpace that can be piped
+func trimspace(s string) (string, error) {
+	return strings.TrimSpace(s), nil
 }
 
 func lower(s string) (string, error) {

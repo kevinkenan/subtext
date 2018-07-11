@@ -13,7 +13,7 @@ import (
 	// "golang.org/x/net/html"
 	"github.com/kevinkenan/subtext/parse"
 	// "github.com/kevinkenan/subtext/macros"
-	// "github.com/kevinkenan/subtext/commands"
+	"github.com/kevinkenan/subtext/commands"
 	// "github.com/kevinkenan/subtext/verbose"
 	"github.com/kevinkenan/cobra"
 	// "github.com/kevinkenan/gohtml"

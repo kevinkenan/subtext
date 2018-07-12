@@ -1,4 +1,4 @@
-package command
+package commands
 
 import (
 	// "bufio"
@@ -8,12 +8,11 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
-	"github.com/kevinkenan/subtext/document"
-	"github.com/kevinkenan/subtext/parse"
+	"github.com/kevinkenan/subtext/subtext"
 	"github.com/kevinkenan/cobra"
 )
 
-func BuildCmd(cmd *cobra.Command, args []string) (err error) {
+func Build(cmd *cobra.Command, args []string) (err error) {
 	cobra.Log("beginning build cmd")
 	cmd.SilenceUsage = true
 	if len(args) == 0 {
@@ -108,12 +107,12 @@ func makeFile(src, dst string) (err error) {
 		return err
 	}
 
-	d := document.NewDoc()
+	d := subtext.NewDoc()
 	d.Name = filepath.Base(src)
 	d.Output = cobra.GetString("output")
 	d.Text = string(input)
-	d.Options = &parse.Options{
-		Macros: *new(parse.MacroMap),
+	d.Options = &subtext.Options{
+		Macros: *new(subtext.MacroMap),
 	}
 
 	output, err := d.Make()

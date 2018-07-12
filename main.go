@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"github.com/kevinkenan/subtext/document"
 	"io"
 	"io/ioutil"
 	"os"
@@ -11,7 +10,7 @@ import (
 	// "strings"
 	// "text/template"
 	// "golang.org/x/net/html"
-	"github.com/kevinkenan/subtext/parse"
+	"github.com/kevinkenan/subtext/subtext"
 	// "github.com/kevinkenan/subtext/macros"
 	"github.com/kevinkenan/subtext/commands"
 	// "github.com/kevinkenan/subtext/verbose"
@@ -55,15 +54,15 @@ func MakeCmd(cmd *cobra.Command, args []string) error {
 			input = append(input, in...)
 		}
 	}
-	d := document.NewDoc()
+	d := subtext.NewDoc()
 	d.Name = name
 	d.Output = cobra.GetString("output")
 	d.Packages = cobra.GetStringSlice("packages")
-	d.Options = &parse.Options{
+	d.Options = &subtext.Options{
 		Plain:  cobra.GetBool("plain"),
 		Reflow: cobra.GetBool("reflow"),
 		Format: cobra.GetString("format"),
-		Macros: *new(parse.MacroMap),
+		Macros: *new(subtext.MacroMap),
 	}
 	d.Text = string(input)
 	output, err := d.Make()
@@ -119,7 +118,7 @@ func WalkCmd(cmd *cobra.Command, args []string) {
 			input = in
 		}
 	}
-	d := document.NewDoc()
+	d := subtext.NewDoc()
 	d.Name = name
 	// d.ParagraphMode = viper.GetBool("paragraph_mode")
 	// if viper.GetBool("paragraph_mode") {
@@ -128,43 +127,43 @@ func WalkCmd(cmd *cobra.Command, args []string) {
 	d.Output = cobra.GetString("output")
 	d.Packages = cobra.GetStringSlice("packages")
 	d.Text = string(input)
-	d.AddMacro(parse.NewMacro("paragraph.begin", "<p>", []string{"orig"}, nil))
-	d.AddMacro(parse.NewMacro("paragraph.end", "</p>\n\n", []string{"orig"}, nil))
-	d.AddMacro(parse.NewMacro("title", "<h1>{{.text}}</h1>", []string{"text"}, nil))
-	d.AddMacro(parse.NewMacro("section", "<h2>{{.text}}</h2>", []string{"text"}, nil))
-	root, _, _ := parse.Parse(name, string(input), nil)
+	d.AddMacro(subtext.NewMacro("paragraph.begin", "<p>", []string{"orig"}, nil))
+	d.AddMacro(subtext.NewMacro("paragraph.end", "</p>\n\n", []string{"orig"}, nil))
+	d.AddMacro(subtext.NewMacro("title", "<h1>{{.text}}</h1>", []string{"text"}, nil))
+	d.AddMacro(subtext.NewMacro("section", "<h2>{{.text}}</h2>", []string{"text"}, nil))
+	root, _, _ := subtext.Parse(name, string(input), nil)
 
-	c := make(chan parse.Node)
+	c := make(chan subtext.Node)
 	go root.Walk(c)
 	// fmt.Printf(":: %s\n", root.String())
 	fmt.Printf("> Root Section Node: contains %d nodes\n", len(root.NodeList))
 	for n := range c {
 		switch n.(type) {
-		case *parse.Text:
-			fmt.Printf("> Text Node: %q\n", n.(*parse.Text).NodeValue)
-		case *parse.Section:
-			fmt.Printf("> Section Node: contains %d nodes\n", len(n.(*parse.Section).NodeList))
-		case *parse.ErrorNode:
-			fmt.Printf("> Error: %q\n", n.(*parse.ErrorNode).NodeValue)
-		case *parse.Cmd:
-			fmt.Printf("> Cmd Node: %q\n", n.(*parse.Cmd).NodeValue)
-			fmt.Printf("     Count: %d nodes\n", n.(*parse.Cmd).Count())
+		case *subtext.Text:
+			fmt.Printf("> Text Node: %q\n", n.(*subtext.Text).NodeValue)
+		case *subtext.Section:
+			fmt.Printf("> Section Node: contains %d nodes\n", len(n.(*subtext.Section).NodeList))
+		case *subtext.ErrorNode:
+			fmt.Printf("> Error: %q\n", n.(*subtext.ErrorNode).NodeValue)
+		case *subtext.Cmd:
+			fmt.Printf("> Cmd Node: %q\n", n.(*subtext.Cmd).NodeValue)
+			fmt.Printf("     Count: %d nodes\n", n.(*subtext.Cmd).Count())
 			fmt.Print("     Flags: <")
-			for _, f := range n.(*parse.Cmd).Flags {
+			for _, f := range n.(*subtext.Cmd).Flags {
 				fmt.Printf("%s", f)
 			}
 			fmt.Println(">")
-			fmt.Printf("     Anonymous: %t\n", n.(*parse.Cmd).Anonymous)
-			if n.(*parse.Cmd).Anonymous {
-				for i, nl := range n.(*parse.Cmd).ArgList {
+			fmt.Printf("     Anonymous: %t\n", n.(*subtext.Cmd).Anonymous)
+			if n.(*subtext.Cmd).Anonymous {
+				for i, nl := range n.(*subtext.Cmd).ArgList {
 					fmt.Printf("     Text Block %d:\n", i)
 					for _, nn := range nl {
 						fmt.Printf("       %q\n", nn)
 					}
 				}
 			} else {
-				if len(n.(*parse.Cmd).ArgMap) > 0 {
-					for k, v := range n.(*parse.Cmd).ArgMap {
+				if len(n.(*subtext.Cmd).ArgMap) > 0 {
+					for k, v := range n.(*subtext.Cmd).ArgMap {
 						fmt.Printf("     Argument %q: %s\n", k, v)
 					}
 				} else {
@@ -215,7 +214,7 @@ func init() {
 	build.Long = `Copies the contents from the specified to directory to the output directory,
 processing subtext files as it goes.
 `
-	build.RunE = BuildCmd
+	build.RunE = commands.Build
 	build.AddFlags(
 		cobra.NewStringFlag("output", cobra.Opts().Abbr("o").Req(true).Desc("path to the output directory")),
 		cobra.NewBoolFlag("recurse", cobra.Opts().Default(false).Desc("includes contents of subdirectories")),
@@ -257,7 +256,7 @@ func main() {
 	// // input := "text •a{one} more text"
 	// input := "text •a{one •b{two\n\n•c{three four}}} more text"
 	// // input := "text •macro{ one •macro2{two} three} four"
-	// root, err := parse.Parse(input)
+	// root, err := subtext.Parse(input)
 	// if err != nil {
 	// 	fmt.Println(err)
 	// } else {

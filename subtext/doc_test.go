@@ -1,8 +1,7 @@
-package document
+package subtext
 
 import (
 	"fmt"
-	"github.com/kevinkenan/subtext/parse"
 	// "github.com/kevinkenan/subtext/verbose"
 	// "strings"
 	"github.com/kevinkenan/cobra"

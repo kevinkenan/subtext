@@ -1,4 +1,4 @@
-package subtext
+package core
 
 import (
 	"fmt"

@@ -1,4 +1,4 @@
-package subtext
+package core
 
 import (
 	"fmt"
@@ -420,9 +420,9 @@ type Cmd struct {
 	Flags    []string
 	cmdToken *token
 	Peek
-	SysCmd bool // true if the command is a system command.
-	Block  bool // true if the command is a block
-	Series bool // true if the command is a serial command
+	SysCmd bool   // true if the command is a system command.
+	Block  bool   // true if the command is a block
+	Series bool   // true if the command is a serial command
 	Format string // the parse format at the time the cmd was created
 }
 

@@ -1,4 +1,4 @@
-package subtext
+package core
 
 import (
 	"fmt"
@@ -9,21 +9,6 @@ import (
 	"github.com/kevinkenan/cobra"
 	"gopkg.in/yaml.v2"
 )
-
-// Document represents the text being processed.
-type Document struct {
-	Name       string
-	Packages   []string
-	Output     string
-	Targets    []string
-	Metadata   map[string]string
-	Text       string
-	Root       *Section
-	Options    *Options
-	Plain      bool // Don't generate paragraphs or aggressively eat whitespace
-	ReflowPars bool // if true, remove new lines and collapse whitespace in paragraphs
-	macrosIn   []*Macro
-}
 
 type RenderError struct {
 	message string
@@ -38,54 +23,12 @@ func (r RenderError) Error() string {
 type Render struct {
 	*Document
 	ParagraphMode bool
-	InParagraph   bool       // true indicates that execution is in a paragraph.
+	InParagraph   bool // true indicates that execution is in a paragraph.
 	ParBuffer     *Cmd //
-	depth         int        // tracks recursion depth
-	skipNodeCount int        // skip the next nodes
-	init          bool       // true if in init mode (no output is written)
+	depth         int  // tracks recursion depth
+	skipNodeCount int  // skip the next nodes
+	init          bool // true if in init mode (no output is written)
 	macros        MacroMap
-}
-
-func NewDoc() *Document {
-	d := Document{macrosIn: []*Macro{}}
-	return &d
-}
-
-func (d *Document) AddMacro(m *Macro) {
-	d.macrosIn = append(d.macrosIn, m)
-}
-
-func (d *Document) Make() (s string, err error) {
-	r := &Render{Document: d, ParagraphMode: !d.Plain}
-	s, err = MakeWith(d.Text, r, d.Options)
-	return
-}
-
-// MakeWith allows arbitrary text to be processed with an existing Render
-// context. Most of the time the Document's Make is used (which calls
-// MakeWith), but MakeWith itself is useful for handling macros embedded in
-// templates.
-func MakeWith(t string, r *Render, options *Options) (s string, err error) {
-	defer func() { cobra.LogV("finished rendering") }()
-	defer func() {
-		if e := recover(); e != nil {
-			switch e.(type) {
-			case RenderError, Error:
-				err = e.(error)
-			default:
-				panic(e)
-			}
-		}
-	}()
-
-	root, macros, err := Parse(r.Name, t, options)
-	if err != nil {
-		return "", err
-	}
-
-	r.macros = macros
-	cobra.LogV("rendering (render)")
-	return r.render(root), nil
 }
 
 func (r *Render) render(root *Section) string {
@@ -184,7 +127,7 @@ func (r *Render) processSysCmd(n *Cmd) string {
 	default:
 		panic(RenderError{message: fmt.Sprintf("Line %d: unknown system command: %q", n.GetLineNum(), name)})
 	}
-	
+
 	return out
 }
 
@@ -247,7 +190,7 @@ func (r *Render) exec(n *Cmd) string {
 	}
 }
 
-func (r *Render) setData(n *Cmd, flowStyle bool)  {
+func (r *Render) setData(n *Cmd, flowStyle bool) {
 	cobra.Tag("cmd").LogfV("begin setData")
 	name := "sys.setdata"
 	// Retrieve the sys.data system command
@@ -293,7 +236,7 @@ func (r *Render) processCmd(n *Cmd) string {
 		panic(RenderError{message: fmt.Sprintf("Line %d: macro %q not defined.", n.GetLineNum(), name)})
 	}
 	cmdLog.Copy().Strunc("macro", m.TemplateText).LogfV("retrieved macro definition")
-	
+
 	renArgs := map[string]interface{}{}
 	Data["reflow"] = r.Options.Reflow
 	Data["format"] = n.Format
@@ -347,7 +290,7 @@ func (r *Render) processCmd(n *Cmd) string {
 	return outs
 }
 
-func (r *Render) ExecuteMacro( m *Macro, data map[string]interface{}, init bool) (string, error) {
+func (r *Render) ExecuteMacro(m *Macro, data map[string]interface{}, init bool) (string, error) {
 	s := strings.Builder{}
 	t := m.Template
 	if init {

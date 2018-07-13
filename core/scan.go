@@ -1,12 +1,12 @@
-package subtext
+package core
 
 import (
 	"fmt"
 	"github.com/kevinkenan/cobra"
+	"io/ioutil"
 	"strings"
 	"unicode"
 	"unicode/utf8"
-	"io/ioutil"
 )
 
 // ----------------------------------------------------------------------------
@@ -118,27 +118,27 @@ const (
 type Loc int
 
 type scanFile struct {
-	name          string     // name of the doc being scanned
-	input         string     // the string being scanned
-	pos           Loc        // current position in the input
-	start         Loc        // start position of this item
-	line          int        // number of newlines seen (starts at 1)
+	name  string // name of the doc being scanned
+	input string // the string being scanned
+	pos   Loc    // current position in the input
+	start Loc    // start position of this item
+	line  int    // number of newlines seen (starts at 1)
 }
 
 // scanner represents the current state.
 type scanner struct {
-	*scanFile                 // the current file being scanned
-	fileStack    []*scanFile // stack of files waiting for scans
-	cmdH          string     // rune indicating a horizontal-mode command
-	cmdV          string     // rune indicating a vertical-mode command
-	comment       string     // rune indicating EOL comment
-	parCmd        string     // rune indicating a paragraph command
-	width         Loc        // width of last rune read from input
-	tokens        chan token // channel of scanned tokens
-	cmdDepth      int        // nesting depth of commands
-	altTerm       bool       // true if '*}' terminates a text block
-	init          bool       // true if in init mode
-	skipConfig    bool
+	*scanFile              // the current file being scanned
+	fileStack  []*scanFile // stack of files waiting for scans
+	cmdH       string      // rune indicating a horizontal-mode command
+	cmdV       string      // rune indicating a vertical-mode command
+	comment    string      // rune indicating EOL comment
+	parCmd     string      // rune indicating a paragraph command
+	width      Loc         // width of last rune read from input
+	tokens     chan token  // channel of scanned tokens
+	cmdDepth   int         // nesting depth of commands
+	altTerm    bool        // true if '*}' terminates a text block
+	init       bool        // true if in init mode
+	skipConfig bool
 	// cmdStack indicates if a command's text block was called from within a
 	// full command (with a context) or from a short command.
 	cmdStack           []*cmdAttrs
@@ -160,24 +160,24 @@ func NewScanner(name, input string) *scanner {
 	// 	line:  1,
 	// }
 	return &scanner{
-		scanFile:       &scanFile{
-							name:  name,
-							input: input,
-							line:  1,
-						},
-		fileStack:     []*scanFile{},
+		scanFile: &scanFile{
+			name:  name,
+			input: input,
+			line:  1,
+		},
+		fileStack: []*scanFile{},
 		// name:          name,
 		// input:         input,
-		cmdH:          "•",
-		cmdV:          "§",
-		comment:       "◊",
-		parCmd:        "¶",
-		tokens:        make(chan token),
+		cmdH:    "•",
+		cmdV:    "§",
+		comment: "◊",
+		parCmd:  "¶",
+		tokens:  make(chan token),
 		// line:          1,
-		parMode:       true,
-		parScannerOn:  true,
-		parScanFlag:   true,
-		parOpen:       false,
+		parMode:      true,
+		parScannerOn: true,
+		parScanFlag:  true,
+		parOpen:      false,
 	}
 }
 
@@ -552,7 +552,7 @@ type ƒ func(*scanner) ƒ
 func scanStart(s *scanner) ƒ {
 	cobra.Tag("scan").LogV("scanStart")
 
-	if s.input[:3] == ">>>" {
+	if len(s.input) > 3 && s.input[:3] == ">>>" {
 		s.scanConfig()
 	}
 
@@ -767,9 +767,9 @@ func scanNewCommand(s *scanner) ƒ {
 		}
 
 		sf := &scanFile{
-			name:          fn,
-			input:         string(in),
-			line:          1,
+			name:  fn,
+			input: string(in),
+			line:  1,
 		}
 
 		cobra.Tag("scan").Add("name", fn).LogV("opening new file")
@@ -823,7 +823,7 @@ func scanNewCommand(s *scanner) ƒ {
 	// 	s.next()
 	// 	s.emit(tokenEOLComment)
 	// 	return scanText
-		// return scanEolComment
+	// return scanEolComment
 	case isHSpace(r) || isEndOfLine(r) || isEndOfFile(r):
 		return s.errorf("unnamed command")
 	default:

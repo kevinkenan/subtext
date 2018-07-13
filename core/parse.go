@@ -1,4 +1,4 @@
-package subtext
+package core
 
 import (
 	"fmt"
@@ -101,7 +101,7 @@ func (p *parser) next() (t *token) {
 	if p.empty {
 		tt := p.scanner.nextToken()
 		t = &tt
-		p.buffer = t 
+		p.buffer = t
 	} else {
 		t = p.buffer
 		p.empty = true
@@ -246,10 +246,10 @@ func (p *parser) parseBody() (nl NodeList, fileDone bool, err error) {
 func (p *parser) parseComment() {
 	for {
 		switch p.next().typeof {
-			case tokenLineBreak, tokenEOF:
-				return
-			default:
-				continue
+		case tokenLineBreak, tokenEOF:
+			return
+		default:
+			continue
 		}
 	}
 }
@@ -446,7 +446,7 @@ func (p *parser) parseCmd(t *token, nl *NodeList) (cmd *Cmd) {
 
 	p.link(cmd)
 	cobra.Tag("parse").Add("token", tokenTypeLookup(t.typeof)).LogV("end")
-	return 
+	return
 }
 
 func (p *parser) blockSpaceEater() {
@@ -514,7 +514,7 @@ func (p *parser) initCmd(c *Cmd) (par *Cmd) {
 	if !p.insideSysCmd && p.parScanOn && !p.insidePar && !c.Block {
 		p.insidePar = true
 		par = NewParBeginNode(c.cmdToken)
-	} else if  !p.insideSysCmd && p.parScanOn && p.insidePar && c.Block {
+	} else if !p.insideSysCmd && p.parScanOn && p.insidePar && c.Block {
 		p.insidePar = false
 		par = NewParEndNode(c.cmdToken)
 	}

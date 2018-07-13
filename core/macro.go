@@ -1,4 +1,4 @@
-package subtext
+package core
 
 import (
 	// "errors"
@@ -12,6 +12,7 @@ import (
 )
 
 var Data map[string]interface{} = map[string]interface{}{}
+
 var Macros MacroMap = MacroMap{}
 
 type Optional struct {
@@ -96,14 +97,14 @@ func (mm MacroMap) GetMacro(name, format string) *Macro {
 }
 
 type Macro struct {
-	Name               string      // The macro's name to match command names
-	TemplateText       string      // The Go template that defines the macro
-	*template.Template             // the parsed template
+	Name               string // The macro's name to match command names
+	TemplateText       string // The Go template that defines the macro
+	*template.Template        // the parsed template
 	Init               string
 	InitTemplate       *template.Template
 	Parameters         []string    // Required parameters
 	Optionals          []*Optional // Optional parameters in correct order
-	Format     string        // The format, e.g. html or latex
+	Format             string      // The format, e.g. html or latex
 	Block              bool        // True if macro should be rendered as a block
 	Series             bool        // When true, subtext eats all space after the macro
 	Ld                 string      // Left delim used in the template

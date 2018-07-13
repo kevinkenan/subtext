@@ -2,19 +2,21 @@ package commands
 
 import (
 	// "bufio"
-	"path/filepath"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
-	"github.com/kevinkenan/subtext/subtext"
+
 	"github.com/kevinkenan/cobra"
+	"github.com/kevinkenan/subtext/core"
 )
 
 func Build(cmd *cobra.Command, args []string) (err error) {
 	cobra.Log("beginning build cmd")
 	cmd.SilenceUsage = true
+
 	if len(args) == 0 {
 		return fmt.Errorf("you must specify a source directory")
 	} else {
@@ -107,12 +109,12 @@ func makeFile(src, dst string) (err error) {
 		return err
 	}
 
-	d := subtext.NewDoc()
+	d := core.NewDoc()
 	d.Name = filepath.Base(src)
 	d.Output = cobra.GetString("output")
 	d.Text = string(input)
-	d.Options = &subtext.Options{
-		Macros: *new(subtext.MacroMap),
+	d.Options = &core.Options{
+		Macros: *new(core.MacroMap),
 	}
 
 	output, err := d.Make()

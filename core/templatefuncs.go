@@ -1,31 +1,31 @@
-package subtext
+package core
 
 import (
 	"fmt"
-	"strings"
-	"strconv"
-	"regexp"
-	"text/template"
 	"reflect"
+	"regexp"
+	"strconv"
+	"strings"
+	"text/template"
 )
 
-var funcMap = template.FuncMap{	
-	"title": strings.Title,
-	"getdata": GetData,
-	"setdata": SetData,
-	"add": add,
-	"sub": sub,
-	"mul": mul,
-	"div": div,
-	"strlist": strlist,
-	"join": join,
-	"split": split,
-	"addsuffix": addsuffix,
-	"addprefix": addprefix,
+var funcMap = template.FuncMap{
+	"title":      strings.Title,
+	"getdata":    GetData,
+	"setdata":    SetData,
+	"add":        add,
+	"sub":        sub,
+	"mul":        mul,
+	"div":        div,
+	"strlist":    strlist,
+	"join":       join,
+	"split":      split,
+	"addsuffix":  addsuffix,
+	"addprefix":  addprefix,
 	"replaceall": replaceall,
-	"trimspace": trimspace,
-	"lower": lower,
-	"upper": upper,
+	"trimspace":  trimspace,
+	"lower":      lower,
+	"upper":      upper,
 }
 
 func GetData(key string) (interface{}, error) {
@@ -86,7 +86,7 @@ func add(a, b interface{}) (interface{}, error) {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		switch bv.Kind() {
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			return  av.Int() + bv.Int(), nil
+			return av.Int() + bv.Int(), nil
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 			return av.Int() + int64(bv.Uint()), nil
 		case reflect.Float32, reflect.Float64:
@@ -323,7 +323,7 @@ func join(sep string, ss []string) string {
 func addsuffix(suf string, ss []string) []string {
 	outs := []string{}
 	for _, s := range ss {
-		outs = append(outs, s + suf)
+		outs = append(outs, s+suf)
 	}
 	return outs
 }
@@ -331,7 +331,7 @@ func addsuffix(suf string, ss []string) []string {
 func addprefix(pre string, ss []string) []string {
 	outs := []string{}
 	for _, s := range ss {
-		outs = append(outs, pre + s)
+		outs = append(outs, pre+s)
 	}
 	return outs
 }
@@ -361,7 +361,6 @@ func regexMatch(re, s string) (bool, error) {
 	}
 	return compiled.MatchString(s), nil
 }
-
 
 func split(sep, s string) ([]string, error) {
 	s = strings.TrimSpace(s)

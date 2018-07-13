@@ -1,4 +1,4 @@
-package subtext
+package core
 
 import (
 	"fmt"
@@ -528,7 +528,6 @@ var commonTestCases = []testCase{
 		tRightCurly,
 		tRightSquare,
 		tEOF}),
-
 
 	// Toggle comment tests.
 	// newLocCase("basic toggle comment", "1◊longtext◊3\n4", tokenList{

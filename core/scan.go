@@ -2,11 +2,12 @@ package core
 
 import (
 	"fmt"
-	"github.com/kevinkenan/cobra"
 	"io/ioutil"
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/kevinkenan/cobra"
 )
 
 // ----------------------------------------------------------------------------
@@ -118,11 +119,12 @@ const (
 type Loc int
 
 type scanFile struct {
-	name  string // name of the doc being scanned
-	input string // the string being scanned
-	pos   Loc    // current position in the input
-	start Loc    // start position of this item
-	line  int    // number of newlines seen (starts at 1)
+	doc   *Document // the Document being scanned
+	name  string    // name of the doc being scanned
+	input string    // the string being scanned
+	pos   Loc       // current position in the input
+	start Loc       // start position of this item
+	line  int       // number of newlines seen (starts at 1)
 }
 
 // scanner represents the current state.
@@ -153,32 +155,35 @@ type scanner struct {
 	blockModeChange    bool // true when the block mode has changed
 }
 
-func NewScanner(name, input string) *scanner {
-	// fs := fileScan{
-	// 	name:  name,
-	// 	input: input,
-	// 	line:  1,
-	// }
-	return &scanner{
+func NewScanner(name, input string, plain bool, d *Document) (s *scanner) {
+
+	s = &scanner{
 		scanFile: &scanFile{
+			doc:   d,
 			name:  name,
 			input: input,
 			line:  1,
 		},
-		fileStack: []*scanFile{},
-		// name:          name,
-		// input:         input,
-		cmdH:    "•",
-		cmdV:    "§",
-		comment: "◊",
-		parCmd:  "¶",
-		tokens:  make(chan token),
-		// line:          1,
+		fileStack:    []*scanFile{},
+		cmdH:         "•",
+		cmdV:         "§",
+		comment:      "◊",
+		parCmd:       "¶",
+		tokens:       make(chan token),
 		parMode:      true,
 		parScannerOn: true,
 		parScanFlag:  true,
 		parOpen:      false,
 	}
+
+	if plain {
+		s.parMode = false
+		s.parScannerOn = false
+		s.parScanFlag = false
+		s.parOpen = false
+	}
+
+	return
 }
 
 type cmdAttrs struct {
@@ -199,15 +204,16 @@ const (
 )
 
 // scan generates paragraph commands while tokenizing the input string.
-func scan(name, input string, plain bool) *scanner {
-	cobra.Tag("scan").WithField("name", name).Add("plain", plain).LogV("scanning input (scan)")
-	s := NewScanner(name, input)
-	if plain {
-		s.parMode = false
-		s.parScannerOn = false
-		s.parScanFlag = false
-		s.parOpen = false
-	}
+func scan(d *Document) *scanner {
+	cobra.Tag("scan").WithField("name", d.Name).Add("plain", d.Plain).LogV("scanning input (scan)")
+	s := NewScanner(d.Name, d.Text, d.Plain, d)
+	return scanWith(s)
+}
+
+// scan generates paragraph commands while tokenizing the input string.
+func scanMacro(name, input string, d *Document) *scanner {
+	cobra.Tag("scan").WithField("name", d.Name).Add("plain", d.Plain).LogV("scanning input (scan)")
+	s := NewScanner(name, input, true, d)
 	return scanWith(s)
 }
 

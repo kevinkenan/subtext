@@ -3,26 +3,25 @@ package core
 import (
 	"fmt"
 	"strings"
-	// "unicode"
-	// "unicode/utf8"
+
 	"github.com/kevinkenan/cobra"
 	"gopkg.in/yaml.v2"
 )
 
 // Parse creates a node tree from the tokens produced by scan.
-func Parse(name, input string, options *Options) (*Section, MacroMap, error) {
-	cobra.Tag("parse").WithField("name", name).Add("plain", options.Plain).LogV("parsing input (parse)")
+func Parse(d *Document) (*Section, error) {
+	cobra.Tag("parse").WithField("name", d.Name).Add("plain", d.Plain).LogV("parsing input (parse)")
 
 	p := &parser{
-		scanner: scan(name, input, options.Plain),
+		doc:     d,
+		scanner: scan(d),
 		root:    NewSection(),
 		empty:   true,
-		macros:  NewMacroMap(),
-		reflow:  options.Reflow,
-		format:  options.Format,
+		reflow:  d.Reflow,
+		format:  d.Format,
 	}
 
-	if options.Plain {
+	if d.Plain {
 		p.parMode = false
 		p.parScanOn = false
 		p.parScanFlag = false
@@ -34,19 +33,44 @@ func Parse(name, input string, options *Options) (*Section, MacroMap, error) {
 		p.insidePar = false
 	}
 
-	for _, m := range options.Macros {
-		p.macros[MacroType{m.Name, m.Format}] = m
+	// for _, m := range d.macrosIn {
+	// 	p.macros[MacroType{m.Name, m.Format}] = m
+	// }
+
+	return doParse(d.Name, p)
+}
+
+func ParseMacro(name, input string, doc *Document) (*Section, error) {
+	// o.Name, o.Default, parseOptions
+	//opts := &Options{Plain: true, Macros: r.macros, Format: n.Format}
+	p := &parser{
+		doc:     doc,
+		scanner: scanMacro(name, input, doc),
+		root:    NewSection(),
+		empty:   true,
+		reflow:  doc.Reflow,
+		format:  doc.Format,
 	}
+
+	// Plain settings
+	p.parMode = false
+	p.parScanOn = false
+	p.parScanFlag = false
+	p.insidePar = false
+
+	// for _, m := range doc.macrosIn {
+	// 	p.macros[MacroType{m.Name, m.Format}] = m
+	// }
 
 	return doParse(name, p)
 }
 
 // TODO: remove this if unneeded
-func ParsePlain(name, input string, options *Options) (*Section, MacroMap, error) {
-	return Parse(name, input, options)
+func ParsePlain(d *Document) (*Section, error) {
+	return Parse(d)
 }
 
-func doParse(n string, p *parser) (*Section, MacroMap, error) {
+func doParse(n string, p *parser) (*Section, error) {
 	cobra.WithField("name", n).LogV("parsing (parse)")
 	p.prevNode = p.root // Node(p.root)?
 	return p.start()
@@ -57,12 +81,12 @@ func doParse(n string, p *parser) (*Section, MacroMap, error) {
 // Parser ---------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 
-type Options struct {
-	Macros MacroMap
-	Reflow bool
-	Plain  bool
-	Format string
-}
+// type Options struct {
+// 	Macros MacroMap
+// 	Reflow bool
+// 	Plain  bool
+// 	Format string
+// }
 
 type pstate struct {
 	sysCmd    bool
@@ -71,13 +95,13 @@ type pstate struct {
 
 // parser represents the current state of the parser.
 type parser struct {
+	doc                *Document
 	scanner            *scanner //
 	root               *Section // Root node of the tree.
 	input              string
 	empty              bool   // true if the buffer is empty.
 	buffer             *token // holds the next token if we peek or backup.
 	prevNode           Node   // the previous node
-	macros             MacroMap
 	reflow             bool
 	format             string // the document's format
 	stateStack         []*pstate
@@ -91,6 +115,16 @@ type parser struct {
 	horizMode          bool // true if cmd exists within a paragraph
 	blockMode          bool // true if we are currently in block mode
 	blockModeChange    bool // true when the block mode has changed
+}
+
+// GetMacro is a convenience function to get a macro.
+func (p *parser) GetMacro(name, format string) *Macro {
+	return p.doc.Folio.GetMacro(name, format)
+}
+
+// AddMacro is a convenience function to add a macro.
+func (p *parser) AddMacro(m *Macro) {
+	p.doc.Folio.AddMacro(m)
 }
 
 func (p *parser) nextToken() (t *token) {
@@ -183,20 +217,20 @@ func appendNode(nl NodeList, ns ...Node) NodeList {
 
 // Parse token stream ---------------------------------------------------------
 
-func (p *parser) start() (n *Section, macs MacroMap, err error) {
+func (p *parser) start() (n *Section, err error) {
 	defer p.recover(&err)
 	cobra.Tag("parse").LogV("parse start")
 	for {
 		nl, done, err := p.parseBody()
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		p.root.append(nl)
 		if done {
 			break
 		}
 	}
-	return p.root, p.macros, nil
+	return p.root, nil
 }
 
 func (p *parser) parseBody() (nl NodeList, fileDone bool, err error) {
@@ -501,7 +535,7 @@ func (p *parser) initCmd(c *Cmd) (par *Cmd) {
 	}
 	cobra.Tag("parse").Add("format", p.format).LogV("set cmd format")
 
-	mac := p.macros.GetMacro(name, format)
+	mac := p.GetMacro(name, format)
 	if mac == nil {
 		p.errorf("Line %d: command %q (format %q) not defined.", c.GetLineNum(), name, p.format)
 		return
@@ -726,13 +760,13 @@ func (p *parser) parseEOF(t *token, nl *NodeList) bool {
 func (p *parser) processSysConfigCmd(n *Cmd, flowStyle bool) error {
 	name := "sys.config"
 	// Retrieve the sys.newmacro system command
-	d := p.macros.GetMacro(name, "")
+	d := p.GetMacro(name, "")
 	if d == nil {
 		return fmt.Errorf("Line %d: system command %q not defined.", n.GetLineNum(), name)
 	}
 	cobra.Tag("cmd").Strunc("macro", d.TemplateText).LogfV("retrieved system command definition")
 
-	args, err := d.ValidateArgs(n)
+	args, err := d.ValidateArgs(n, p.doc)
 	if err != nil {
 		return fmt.Errorf("Line %d: ValidateArgs failed on system command %q: %q", n.GetLineNum(), name, err)
 	}

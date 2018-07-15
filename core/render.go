@@ -21,14 +21,33 @@ func (r RenderError) Error() string {
 // RenderExecution represents a render process and keeps track information
 // needed during the rendering.
 type Render struct {
-	*Document
-	ParagraphMode bool
+	Doc           *Document
 	InParagraph   bool // true indicates that execution is in a paragraph.
 	ParBuffer     *Cmd //
 	depth         int  // tracks recursion depth
 	skipNodeCount int  // skip the next nodes
 	init          bool // true if in init mode (no output is written)
-	macros        MacroMap
+}
+
+func NewRender(d *Document) *Render {
+	return &Render{
+		Doc: d,
+	}
+}
+
+// GetMacro is a convenience function to get a macro.
+func (r *Render) getMacro(name, format string) *Macro {
+	return r.Doc.Folio.GetMacro(name, format)
+}
+
+// AddMacro is a convenience function to add a macro.
+func (r *Render) addMacro(m *Macro) {
+	r.Doc.Folio.AddMacro(m)
+}
+
+// AddMacro is a convenience function to merge a MacroMap
+func (r *Render) addMacros(mm MacroMap) {
+	r.Doc.Folio.AddMacros(mm)
 }
 
 func (r *Render) render(root *Section) string {
@@ -138,13 +157,13 @@ func (r *Render) exec(n *Cmd) string {
 	cmdLog := cobra.Tag("cmd")
 
 	// Get the macro definition.
-	m := r.macros.GetMacro(name, "")
+	m := r.getMacro(name, "")
 	if m == nil {
 		panic(RenderError{message: fmt.Sprintf("Line %d: macro %q not defined.", n.GetLineNum(), name)})
 	}
 	cmdLog.Copy().Strunc("macro", m.TemplateText).LogfV("retrieved macro definition")
 
-	args, err := m.ValidateArgs(n)
+	args, err := m.ValidateArgs(n, r.Doc)
 	if err != nil {
 		panic(RenderError{message: fmt.Sprintf("Line %d: ValidateArgs failed on macro %q: %q", n.GetLineNum(), name, err)})
 	}
@@ -159,9 +178,9 @@ func (r *Render) exec(n *Cmd) string {
 	m = NewBlockMacro("anon", renArgs["template"].(string), nil, nil)
 
 	// renArgs = map[string]interface{}{}
-	Data["reflow"] = r.Options.Reflow
+	Data["reflow"] = r.Doc.Reflow
 	Data["format"] = n.Format
-	Data["plain"] = r.Options.Plain
+	Data["plain"] = r.Doc.Plain
 	Data["flags"] = n.Flags
 	renArgs["data"] = Data
 
@@ -174,15 +193,15 @@ func (r *Render) exec(n *Cmd) string {
 	cmdLog.Copy().Add("name", name).Add("ld", m.Ld).Logf("executed macro, ready for parsing")
 
 	// Handle commands embedded in the macro.
-	opts := &Options{Plain: true, Macros: r.macros}
-	output, _, err := Parse(name, s, opts)
+	// opts := &Options{Plain: true, Macros: r.macros}
+	output, err := ParseMacro(name, s, r.Doc)
 	if err != nil {
 		panic(RenderError{message: fmt.Sprintf("Line %d: error in template for macro %q: %q", n.GetLineNum(), name, err)})
 	} else {
 		cmdLog.Copy().Add("nodes", output.Count()-1).LogfV(" macro, ready for rendering")
 		outs := r.render(output)
 
-		if n.Block && !r.Options.Plain {
+		if n.Block && !r.Doc.Plain {
 			outs = outs + "\n"
 		}
 		cobra.Tag("cmd").LogfV("end exec")
@@ -194,12 +213,12 @@ func (r *Render) setData(n *Cmd, flowStyle bool) {
 	cobra.Tag("cmd").LogfV("begin setData")
 	name := "sys.setdata"
 	// Retrieve the sys.data system command
-	d := r.macros.GetMacro(name, "")
+	d := r.getMacro(name, "")
 	if d == nil {
 		panic(RenderError{message: fmt.Sprintf("Line %d: system command %q not defined.", n.GetLineNum(), name)})
 	}
 
-	args, err := d.ValidateArgs(n)
+	args, err := d.ValidateArgs(n, r.Doc)
 	if err != nil {
 		panic(RenderError{message: fmt.Sprintf("Line %d: ValidateArgs failed on system command %q: %q", n.GetLineNum(), name, err)})
 	}
@@ -225,24 +244,26 @@ func (r *Render) setData(n *Cmd, flowStyle bool) {
 	return
 }
 
+type cmdArgs map[string]interface{}
+
+func newCmdArgs(d *Document) (c cmdArgs) {
+	c = make(cmdArgs)
+	c["Doc"] = d
+	c["Data"] = d.Folio.Data
+	return
+}
+
 func (r *Render) processCmd(n *Cmd) string {
 	name := n.GetCmdName()
 	cobra.Tag("render").WithField("cmd", name).LogV("rendering command (cmd)")
 	cmdLog := cobra.Tag("cmd")
 
 	// Get the macro definition.
-	m := r.macros.GetMacro(name, n.Format)
+	m := r.getMacro(name, n.Format)
 	if m == nil {
 		panic(RenderError{message: fmt.Sprintf("Line %d: macro %q not defined.", n.GetLineNum(), name)})
 	}
 	cmdLog.Copy().Strunc("macro", m.TemplateText).LogfV("retrieved macro definition")
-
-	renArgs := map[string]interface{}{}
-	Data["reflow"] = r.Options.Reflow
-	Data["format"] = n.Format
-	Data["plain"] = r.Options.Plain
-	Data["flags"] = n.Flags
-	renArgs["data"] = Data
 
 	if m.InitTemplate != nil {
 		data := map[string]interface{}{}
@@ -254,11 +275,19 @@ func (r *Render) processCmd(n *Cmd) string {
 		cmdLog.Copy().Add("name", name).Add("ld", m.Ld).Logf("executed init macro")
 	}
 
-	args, err := m.ValidateArgs(n)
+	args, err := m.ValidateArgs(n, r.Doc)
 	if err != nil {
 		panic(RenderError{message: fmt.Sprintf("Line %d: ValidateArgs failed on macro %q: %s", n.GetLineNum(), name, err)})
 	}
 
+	// renArgs := map[string]interface{}{}
+	// Data["reflow"] = r.Doc.Reflow
+	// Data["format"] = n.Format
+	// Data["plain"] = r.Doc.Plain
+	// Data["flags"] = n.Flags
+	// renArgs["data"] = Data
+
+	renArgs := newCmdArgs(r.Doc)
 	// Load the validated args into a map for easy access.
 	for k, v := range args {
 		renArgs[k] = r.renderNodeList(v)
@@ -274,8 +303,8 @@ func (r *Render) processCmd(n *Cmd) string {
 	cmdLog.Copy().Add("name", name).Add("ld", m.Ld).Logf("executed macro, ready for parsing")
 
 	// Handle commands embedded in the macro.
-	opts := &Options{Plain: true, Macros: r.macros, Format: n.Format}
-	output, _, err := Parse(name, s, opts)
+	// opts := &Options{Plain: true, Macros: r.macros, Format: n.Format}
+	output, err := ParseMacro(name, s, r.Doc) //(name, s, opts)
 	if err != nil {
 		panic(RenderError{message: fmt.Sprintf("Line %d: error in template for macro %q: %q", n.GetLineNum(), name, err)})
 	}
@@ -283,7 +312,7 @@ func (r *Render) processCmd(n *Cmd) string {
 	cmdLog.Copy().Add("nodes", output.Count()-1).LogfV("parsed macro, ready for rendering")
 	outs := r.render(output)
 
-	if n.Block && !r.Options.Plain {
+	if n.Block && !r.Doc.Plain {
 		outs = outs + "\n"
 	}
 

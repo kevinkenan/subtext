@@ -717,7 +717,7 @@ func scannerPlainTest(t *testing.T, tests []testCase) bool {
 
 // runTest also gathers the emitted tokens into a slice.
 func runPlainTest(t testCase) (tokens tokenList) {
-	s := scan(t.name, t.input, true)
+	s := scan(&Document{Name: t.name, Text: t.input, Plain: true})
 	for {
 		token := s.nextToken()
 		tokens = append(tokens, &token)
@@ -1220,7 +1220,7 @@ func verifyOuterPar(t *testing.T, ts tokenList, parType, space, name string) boo
 
 // runTest also gathers the emitted tokens into a slice.
 func runTest(t *testParCase) (tokens tokenList) {
-	s := scan(t.name, t.input, false)
+	s := scan(&Document{Name: t.name, Text: t.input, Plain: false})
 	for {
 		token := s.nextToken()
 		tokens = append(tokens, &token)

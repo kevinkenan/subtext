@@ -109,35 +109,33 @@ func makeFile(src, dst string) (err error) {
 		return err
 	}
 
-	d := core.NewDoc()
-	d.Name = filepath.Base(src)
+	f := core.NewFolio()
+	d := core.NewDoc(src, filepath.Base(src))
+	f.Append(d)
 	d.Output = cobra.GetString("output")
 	d.Text = string(input)
-	d.Options = &core.Options{
-		Macros: *new(core.MacroMap),
-	}
 
 	output, err := d.Make()
 	if err != nil {
 		return err
 	}
 
-	f, err := os.Create(dst)
+	fo, err := os.Create(dst)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		if e := f.Close(); e != nil {
+		if e := fo.Close(); e != nil {
 			err = e
 		}
 	}()
 
-	_, err = f.WriteString(output)
+	_, err = fo.WriteString(output)
 	if err != nil {
 		return
 	}
 
-	err = f.Sync()
+	err = fo.Sync()
 	if err != nil {
 		return
 	}

@@ -3,7 +3,6 @@ package core
 import (
 	"fmt"
 	"strings"
-	// "sort"
 	"testing"
 )
 
@@ -12,7 +11,7 @@ import (
 
 type selectArgumentsTestCase struct {
 	name        string
-	command     string
+	command     Document
 	loc         int // The index of the command in root.NodeList
 	reqParams   []string
 	optParams   []string
@@ -22,47 +21,47 @@ type selectArgumentsTestCase struct {
 }
 
 var selectArgumentsTestCases = []selectArgumentsTestCase{
-	{"no args", "•X[]", 0, []string{"one"}, nil,
+	{"no args", newPlainTestDoc("•X[]"), 0, []string{"one"}, nil,
 		nil, nil, []string{"one"}},
-	{"no args and no parameters", "•X[]", 0, nil, nil,
+	{"no args and no parameters", newPlainTestDoc("•X[]"), 0, nil, nil,
 		nil, nil, nil},
-	{"empty bare arg", "•X{}", 0, []string{"one"}, nil,
+	{"empty bare arg", newPlainTestDoc("•X{}"), 0, []string{"one"}, nil,
 		[]string{"one"}, nil, nil},
-	{"empty anonymous arg", "•X[{}]", 0, []string{"one"}, nil,
+	{"empty anonymous arg", newPlainTestDoc("•X[{}]"), 0, []string{"one"}, nil,
 		[]string{"one"}, nil, nil},
-	{"anonymous arg with missing args", "•X{a}", 0, []string{"one", "two", "three"}, nil,
+	{"anonymous arg with missing args", newPlainTestDoc("•X{a}"), 0, []string{"one", "two", "three"}, nil,
 		nil, nil, []string{"two", "three"}},
-	{"anonymous args with one unknown", "•X[{a}{b}]", 0, []string{"one"}, nil,
+	{"anonymous args with one unknown", newPlainTestDoc("•X[{a}{b}]"), 0, []string{"one"}, nil,
 		nil, []string{"#2"}, nil},
-	{"anonymous with only optional args", "•X[{abc}{xyz}]", 0, nil, []string{"one", "two"},
+	{"anonymous with only optional args", newPlainTestDoc("•X[{abc}{xyz}]"), 0, nil, []string{"one", "two"},
 		[]string{"one", "two"}, nil, nil},
-	{"anonymous with an optional arg", "•X[{a}{b}]", 0, []string{"one"}, []string{"two"},
+	{"anonymous with an optional arg", newPlainTestDoc("•X[{a}{b}]"), 0, []string{"one"}, []string{"two"},
 		[]string{"one", "two"}, nil, nil},
-	{"anonymous with optional and unknown args", "•X[{a}{b}{c}]", 0, []string{"one"}, []string{"two"},
+	{"anonymous with optional and unknown args", newPlainTestDoc("•X[{a}{b}{c}]"), 0, []string{"one"}, []string{"two"},
 		nil, []string{"#3"}, nil},
-	{"named args", "•X[one={a}]", 0, []string{"one"}, nil,
+	{"named args", newPlainTestDoc("•X[one={a}]"), 0, []string{"one"}, nil,
 		[]string{"one"}, nil, nil},
-	{"named and optional args", "•X[one={a} two={b}]", 0, []string{"one"}, []string{"two"},
+	{"named and optional args", newPlainTestDoc("•X[one={a} two={b}]"), 0, []string{"one"}, []string{"two"},
 		[]string{"one", "two"}, nil, nil},
-	{"named with unknown args", "•X[one={a} two={b}]", 0, []string{"one"}, nil,
+	{"named with unknown args", newPlainTestDoc("•X[one={a} two={b}]"), 0, []string{"one"}, nil,
 		nil, []string{"two"}, nil},
-	{"named with missing args", "•X[one={a}]", 0, []string{"one", "three"}, nil,
+	{"named with missing args", newPlainTestDoc("•X[one={a}]"), 0, []string{"one", "three"}, nil,
 		nil, nil, []string{"three"}},
-	{"named with unknown and optional args", "•X[one={a} two={b}]", 0, []string{"one"}, []string{"three"},
+	{"named with unknown and optional args", newPlainTestDoc("•X[one={a} two={b}]"), 0, []string{"one"}, []string{"three"},
 		nil, []string{"two"}, nil},
-	{"named with unknown and missing args", "•X[three={a} one={b}]", 0, nil, []string{"one", "three"},
+	{"named with unknown and missing args", newPlainTestDoc("•X[three={a} one={b}]"), 0, nil, []string{"one", "three"},
 		[]string{"one", "three"}, nil, nil},
-	{"named with no parameters at all", "•X[one={a} two={b}]", 0, nil, nil,
+	{"named with no parameters at all", newPlainTestDoc("•X[one={a} two={b}]"), 0, nil, nil,
 		nil, []string{"one", "two"}, nil},
 }
 
 func testSelectArguments(t *testing.T, test *selectArgumentsTestCase) {
-	opt := &Options{Plain: true}
-	opt.Macros = NewMacroMap()
-	opt.Macros[MacroType{"X", ""}] = NewMacro("X", "", nil, nil)
-	opt.Macros[MacroType{"sys.Z", ""}] = NewMacro("sys.Z", "", nil, nil)
+	f := NewFolio()
+	f.AddMacro(NewMacro("X", "", nil, nil))
+	f.AddMacro(NewMacro("sys.Z", "", nil, nil))
+	f.Append(&test.command)
 
-	root, _, err := Parse(test.name, test.command, opt)
+	root, err := Parse(f.GetDocs()[0])
 
 	if err != nil {
 		t.Errorf("%s: Parse failed: %s", test.name, err)
@@ -160,58 +159,68 @@ func isSubset(a, b []string) bool {
 // The initial opening paragraph command is skipped in these tests.
 
 type parseTestCase struct {
-	name     string
-	input    string
+	name string
+	// input    string
+	doc      Document
 	expOut   string
 	expErr   bool
 	expNodes []string
 }
 
+func newPlainTestDoc(s string) Document {
+	return Document{
+		Name:  "testdoc",
+		Path:  "testpath",
+		Text:  s,
+		Plain: true,
+	}
+}
+
 var parseTestCases = []parseTestCase{
-	{"empty", "", "", false, []string{}},
-	{"basic", "test", "test", false, []string{"Text Node"}},
-	{"contains three literals", "test ``, `• and `◊.", "test `, • and ◊.", false, []string{
+	{"empty", newPlainTestDoc(""), "", false, []string{}},
+	{"basic", newPlainTestDoc("test"), "test", false, []string{"Text Node"}},
+	{"contains three literals", newPlainTestDoc("test ``, `• and `◊."), "test `, • and ◊.", false, []string{
 		"Text Node",
 		"Text Node",
 		"Text Node",
 		"Text Node"}},
-	{"basic with linebreak", "test\nline two", "test\nline two", false, []string{
+	{"basic with linebreak", newPlainTestDoc("test\nline two"), "test\nline two", false, []string{
 		"Text Node",
 		"Text Node",
 		"Text Node"}},
-	{"bare command", "1 •X[] 3", "1 •X[] 3", false, []string{
+	{"bare command", newPlainTestDoc("1 •X[] 3"), "1 •X[] 3", false, []string{
 		"Text Node",
 		"Cmd Node",
 		"Text Node"}},
-	{"simple empty command", "1 •X{} 3", "1 •X[{}] 3", false, []string{
+	{"simple empty command", newPlainTestDoc("1 •X{} 3"), "1 •X[{}] 3", false, []string{
 		"Text Node",
 		"Cmd Node",
 		"Text Node"}},
-	{"two anonymous command args", "1 •X[{a}{b}] 3", "1 •X[{a}{b}] 3", false, []string{
+	{"two anonymous command args", newPlainTestDoc("1 •X[{a}{b}] 3"), "1 •X[{a}{b}] 3", false, []string{
 		"Text Node",
 		"Cmd Node",
 		"Text Node"}},
-	{"flags", "1 •X[<34 \n5=6>]7", "1 •X[<34,5=6>]7", false, []string{
+	{"flags", newPlainTestDoc("1 •X[<34 \n5=6>]7"), "1 •X[<34,5=6>]7", false, []string{
 		"Text Node",
 		"Cmd Node",
 		"Text Node"}},
-	{"anonymous command on different lines", "1 •X[{a}\n{•X{c}}] 4", "1 •X[{a}{•X[{c}]}] 4", false, []string{
+	{"anonymous command on different lines", newPlainTestDoc("1 •X[{a}\n{•X{c}}] 4"), "1 •X[{a}{•X[{c}]}] 4", false, []string{
 		"Text Node",
 		"Cmd Node",
 		"Text Node"}},
-	{"anonymous command with line breaks", "1 •X[{a\nb} {c\nd}] 4", "1 •X[{a\nb}{c\nd}] 4", false, []string{
+	{"anonymous command with line breaks", newPlainTestDoc("1 •X[{a\nb} {c\nd}] 4"), "1 •X[{a\nb}{c\nd}] 4", false, []string{
 		"Text Node",
 		"Cmd Node",
 		"Text Node"}},
-	{"two named args on different lines", "1 •X[x={a}\ny={b}]3", "1 •X[x={a}y={b}]3", false, []string{
+	{"two named args on different lines", newPlainTestDoc("1 •X[x={a}\ny={b}]3"), "1 •X[x={a}y={b}]3", false, []string{
 		"Text Node",
 		"Cmd Node",
 		"Text Node"}},
-	{"complex context with named args", "1 •X[1={a}2={b •X{c}}] 4", "1 •X[1={a}2={b •X[{c}]}] 4", false, []string{
+	{"complex context with named args", newPlainTestDoc("1 •X[1={a}2={b •X{c}}] 4"), "1 •X[1={a}2={b •X[{c}]}] 4", false, []string{
 		"Text Node",
 		"Cmd Node",
 		"Text Node"}},
-	{"line breaks", "\n\n1\n\n2\n\n3\n", "\n\n1\n\n2\n\n3\n", false, []string{
+	{"line breaks", newPlainTestDoc("\n\n1\n\n2\n\n3\n"), "\n\n1\n\n2\n\n3\n", false, []string{
 		"Text Node",
 		"Text Node",
 		"Text Node",
@@ -227,30 +236,39 @@ var parseTestCases = []parseTestCase{
 	// 	}},
 
 	// SysCmd tests
-	{"SysCmd", "test•(Z)now", "test•sys.Z[]now", false, []string{
+	{"SysCmd", newPlainTestDoc("test•(Z)now"), "test•sys.Z[]now", false, []string{
 		"Text Node",
 		"Cmd Node",
 		"Text Node"}},
-	{"SysCmd advanced", "test•(Z){that}now", "test•sys.Z[{that}]now", false, []string{
+	{"SysCmd advanced", newPlainTestDoc("test•(Z){that}now"), "test•sys.Z[{that}]now", false, []string{
 		"Text Node",
 		"Cmd Node",
 		"Text Node"}},
-	{"SysCmd with linebreak", "test•(Z){\nthat}now", "test•sys.Z[{\nthat}]now", false, []string{
+	{"SysCmd with linebreak", newPlainTestDoc("test•(Z){\nthat}now"), "test•sys.Z[{\nthat}]now", false, []string{
 		"Text Node",
 		"Cmd Node",
 		"Text Node"}},
-	{"SysCmd", "test•(Z)%  \n now", "test•sys.Z[]now", false, []string{
+	{"SysCmd", newPlainTestDoc("test•(Z)%  \n now"), "test•sys.Z[]now", false, []string{
 		"Text Node",
 		"Cmd Node",
 		"Text Node"}},
 
-	// // Error tests
-	// {"basic kv command", "1•", "", 0, true, false},
+	// Error tests
+	// {"basic kv command", newPlainTestDoc("1•"), "", 0, true, false},
+}
+
+func newParTestDoc(s string) Document {
+	return Document{
+		Name:  "testdoc",
+		Path:  "testpath",
+		Text:  s,
+		Plain: false,
+	}
 }
 
 var parParseTestCases = []parseTestCase{
-	// Paragaph tests
-	{"basic paragraph", "one\n\ntwo",
+	// 	// Paragaph tests
+	{"basic paragraph", newParTestDoc("one\n\ntwo"),
 		"•paragraph.begin[]one•paragraph.end[]•paragraph.begin[]two•paragraph.end[]", false, []string{
 			"Cmd Node",
 			"Text Node",
@@ -258,14 +276,14 @@ var parParseTestCases = []parseTestCase{
 			"Cmd Node",
 			"Text Node",
 			"Cmd Node"}},
-	{"simple command with paragraph", "1•X{A\n\nB}3",
+	{"simple command with paragraph", newParTestDoc("1•X{A\n\nB}3"),
 		"•paragraph.begin[]1•X[{A•paragraph.end[]•paragraph.begin[]B}]3•paragraph.end[]", false, []string{
 			"Cmd Node",
 			"Text Node",
 			"Cmd Node",
 			"Text Node",
 			"Cmd Node"}},
-	{"simple command with spaces", "•X{}    \n\nA",
+	{"simple command with spaces", newParTestDoc("•X{}    \n\nA"),
 		"•paragraph.begin[]•X[{}]    •paragraph.end[]•paragraph.begin[]A•paragraph.end[]", false, []string{
 			"Cmd Node",
 			"Cmd Node",
@@ -274,36 +292,35 @@ var parParseTestCases = []parseTestCase{
 			"Cmd Node",
 			"Text Node",
 			"Cmd Node"}},
-	{"new macro",
+	{"new macro", newParTestDoc(
 		`•(newmacro){
-    name: section
-    block: true
-    parameters: ["text"]
-    template: "((.text))"
-}
-•section{a}`,
+name: section
+block: true
+parameters: ["text"]
+template: "((.text))"
+}•section{a}`),
 		"•section[{a}]", false, []string{
 			"Cmd Node"}},
-	// {"context command with paragraph", "1•2[<x>{A\n \nB}{\n\nC}]3",
-	// 	"•sys.paragraph.begin[<>{}]1•2[<x>{A•sys.paragraph.end[<>{\n \n}]•sys.paragraph.begin[<>{}]B}{•sys.paragraph.end[<>{\n\n}]•sys.paragraph.begin[<>{}]C}]3•sys.paragraph.end[<>{}]",
-	// 	19, false, false},
-	// {"line breaks with parscan flag", "\n\n1¶-\n\n¶+2\n\n3\n",
-	// 	"•sys.paragraph.begin[<>{}]1\n\n2•sys.paragraph.end[<>{\n\n}]•sys.paragraph.begin[<>{}]3•sys.paragraph.end[<>{\n}]",
-	// 	13, false, false},
-	// {"line breaks with parscan flag off", "¶-\n\n1\n\n2\n\n3\n", "\n\n1\n\n2\n\n3\n", 2, false, false},
-	// {"vertical mode test", "\n\n§a{b}\n\ncde\n",
-	// 	"•a[<>{b}]•sys.paragraph.begin[<>{}]cde•sys.paragraph.end[<>{\n}]", 8, false, false},
+}
+
+func newFlowTestDoc(s string) Document {
+	return Document{
+		Name:   "testdoc",
+		Path:   "testpath",
+		Text:   s,
+		Reflow: true,
+	}
 }
 
 var flowParseTestCases = []parseTestCase{
-	{"flow text", "    A    \nB",
+	{"flow text", newFlowTestDoc("    A    \nB"),
 		"•paragraph.begin[]A B•paragraph.end[]", false, []string{
 			"Cmd Node",
 			"Text Node",
 			"Text Node",
 			"Text Node",
 			"Cmd Node"}},
-	{"flow simple command arg with spaces", "•X{arg}    \n\nA",
+	{"flow simple command arg with spaces", newFlowTestDoc("•X{arg}    \n\nA"),
 		"•paragraph.begin[]•X[{arg}]•paragraph.end[]•paragraph.begin[]A•paragraph.end[]", false, []string{
 			"Cmd Node",
 			"Cmd Node",
@@ -312,7 +329,7 @@ var flowParseTestCases = []parseTestCase{
 			"Cmd Node",
 			"Text Node",
 			"Cmd Node"}},
-	{"flow simple command with spaces", "•X{}    \n\nA",
+	{"flow simple command with spaces", newFlowTestDoc("•X{}    \n\nA"),
 		"•paragraph.begin[]•X[{}]•paragraph.end[]•paragraph.begin[]A•paragraph.end[]", false, []string{
 			"Cmd Node",
 			"Cmd Node",
@@ -323,17 +340,6 @@ var flowParseTestCases = []parseTestCase{
 			"Cmd Node"}},
 }
 
-func TestParse(t *testing.T) {
-	tnum := -1
-	var start, end = 0, len(parParseTestCases)
-	if tnum > 0 {
-		start = tnum
-		end = tnum + 1
-	}
-	opts := &Options{Plain: false}
-	testParse(t, parParseTestCases, opts, start, end)
-}
-
 func TestPlainParse(t *testing.T) {
 	tnum := -1
 	var start, end = 0, len(parseTestCases)
@@ -341,8 +347,22 @@ func TestPlainParse(t *testing.T) {
 		start = tnum
 		end = tnum + 1
 	}
-	opts := &Options{Plain: true}
-	testParse(t, parseTestCases, opts, start, end)
+	// opts := &Options{Plain: true}
+	// d := NewDoc("testdoc", "testpath")
+	// d.Plain = true
+	testParse(t, parseTestCases, start, end)
+}
+
+func TestParse(t *testing.T) {
+	tnum := -1
+	var start, end = 0, len(parParseTestCases)
+	if tnum > 0 {
+		start = tnum
+		end = tnum + 1
+	}
+	// opts := &Options{Plain: false}
+	// d := NewDoc("testdoc", "testpath")
+	testParse(t, parParseTestCases, start, end)
 }
 
 func TestFlowParse(t *testing.T) {
@@ -352,21 +372,25 @@ func TestFlowParse(t *testing.T) {
 		start = tnum
 		end = tnum + 1
 	}
-	opts := &Options{Plain: false, Reflow: true}
-	testParse(t, flowParseTestCases, opts, start, end)
+	// opts := &Options{Plain: false, Reflow: true}
+	// d := NewDoc("testdoc", "testpath")
+	// d.Reflow = true
+	testParse(t, flowParseTestCases, start, end)
 }
 
-func testParse(t *testing.T, tests []parseTestCase, opts *Options, start, end int) {
-	opts.Macros = NewMacroMap()
-	opts.Macros[MacroType{"X", ""}] = NewMacro("X", "", nil, nil)
-	opts.Macros[MacroType{"sys.Z", ""}] = NewMacro("sys.Z", "", nil, nil)
+func testParse(t *testing.T, tests []parseTestCase, start, end int) {
 	for tc, test := range tests[start:end] {
 		var (
 			result *Section
 			err    error
 		)
 
-		result, _, err = Parse(test.name, test.input, opts)
+		f := NewFolio()
+		f.AddMacro(NewMacro("X", "", nil, nil))
+		f.AddMacro(NewMacro("sys.Z", "", nil, nil))
+		f.Append(&test.doc)
+
+		result, err = Parse(f.GetDocs()[0])
 		if err != nil {
 			// fmt.Printf("%s: %q -> error: %q\n", test.name, test.input, err)
 			t.Errorf("%s: %s\n", test.name, err)

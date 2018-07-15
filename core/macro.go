@@ -1,25 +1,28 @@
 package core
 
 import (
-	// "errors"
 	"fmt"
 	"strings"
 	"text/template"
-	// "unicode"
-	// "unicode/utf8"
+
 	"github.com/kevinkenan/cobra"
 	"gopkg.in/yaml.v2"
 )
 
 var Data map[string]interface{} = map[string]interface{}{}
 
-var Macros MacroMap = MacroMap{}
+// Macros is the global repository for macro definitions.
+var Macros = MacroMap{}
 
+// Optional represents an optional parameter in a macro. If an argument is not
+// specified for the optional parameter, the parameter's default value is
+// used.
 type Optional struct {
 	Name    string
 	Default string
 }
 
+// NewOptional creates a new Optional parameter.
 func NewOptional(name, dflt string) *Optional {
 	return &Optional{name, dflt}
 }
@@ -67,12 +70,9 @@ func NewMacroMap() MacroMap {
 		NewBlockMacro("Subtext", "subtext, version 0.0.1", nil, nil),
 	}
 
-	mt := MacroType{Name: "", Format: ""}
-
 	// Add default macros
 	for _, m := range macs {
-		mt.Name = m.Name
-		mm[mt] = m
+		mm.AddMacro(m)
 	}
 
 	return mm
@@ -94,6 +94,18 @@ func (mm MacroMap) GetMacro(name, format string) *Macro {
 	}
 
 	return nil
+}
+
+// AddMacro adds a single Macro to the map.
+func (mm MacroMap) AddMacro(m *Macro) {
+	mm[MacroType{m.Name, m.Format}] = m
+}
+
+// AddMacros merges the MacroMap passed as an argument into Folio's MacroMap.
+func (mm MacroMap) AddMacros(newmm MacroMap) {
+	for k, v := range newmm {
+		mm[k] = v
+	}
 }
 
 type Macro struct {
@@ -182,7 +194,7 @@ func (m *Macro) isOptionalParameter(arg string) (bool, int) {
 
 // CheckArgs returns a NodeMap of all the valid arguments or an error
 // indicating why the arguments are not valid.
-func (m *Macro) ValidateArgs(c *Cmd) (NodeMap, error) {
+func (m *Macro) ValidateArgs(c *Cmd, d *Document) (NodeMap, error) {
 	selected, unknown, missing := c.SelectArguments(m.Parameters, m.ListOptions())
 	if missing != nil {
 		// Missing required arguments are fatal.
@@ -203,10 +215,11 @@ func (m *Macro) ValidateArgs(c *Cmd) (NodeMap, error) {
 			c.GetLineNum(), m.Name, len(unknown), s, unknown)
 	}
 	// The arguments are valid so add any missing optionals.
-	parseOptions := &Options{Plain: true, Macros: Macros}
+	// parseOptions := &Options{Plain: true, Macros: Macros}
 	for _, o := range m.Optionals {
 		if _, found := selected[o.Name]; !found {
-			nl, _, err := Parse(o.Name, o.Default, parseOptions)
+			// nl, _, err := Parse(o.Name, o.Default, parseOptions)
+			nl, err := ParseMacro(o.Name, o.Default, d)
 			if err != nil {
 				return nil, fmt.Errorf("parsing default: %s", err)
 			}
@@ -219,13 +232,13 @@ func (m *Macro) ValidateArgs(c *Cmd) (NodeMap, error) {
 func (p *parser) addNewMacro(n *Cmd, flowStyle bool) error {
 	name := "sys.newmacro"
 	// Retrieve the sys.newmacro system command
-	d := p.macros.GetMacro(name, "")
+	d := p.GetMacro(name, "")
 	if d == nil {
 		return fmt.Errorf("Line %d: system command %q not defined.", n.GetLineNum(), name)
 	}
 	cobra.Tag("cmd").Strunc("macro", d.TemplateText).LogfV("retrieved system command definition")
 
-	args, err := d.ValidateArgs(n)
+	args, err := d.ValidateArgs(n, p.doc)
 	if err != nil {
 		return fmt.Errorf("Line %d: ValidateArgs failed on system command %q: %q", n.GetLineNum(), name, err)
 	}
@@ -273,9 +286,10 @@ func (p *parser) addNewMacro(n *Cmd, flowStyle bool) error {
 	}
 
 	m.Parse()
-	mt := MacroType{m.Name, m.Format}
-	p.macros[mt] = m // TODO: remove the parse.macro struct
-	Macros[mt] = m
+	// mt := MacroType{m.Name, m.Format}
+	// p.macros[mt] = m // TODO: remove the parse.macro struct
+	// Macros[mt] = m
+	p.AddMacro(m)
 	cobra.Tag("cmd").LogfV("loaded new macro")
 	return nil
 }

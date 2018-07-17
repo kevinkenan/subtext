@@ -207,6 +207,7 @@ const (
 func scan(d *Document) *scanner {
 	cobra.Tag("scan").WithField("name", d.Name).Add("plain", d.Plain).LogV("scanning input (scan)")
 	s := NewScanner(d.Name, d.Text, d.Plain, d)
+	s.pos = Loc(d.contentBegin)
 	return scanWith(s)
 }
 

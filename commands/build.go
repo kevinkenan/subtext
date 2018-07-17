@@ -111,7 +111,7 @@ func makeFile(src, dst string) (err error) {
 
 	f := core.NewFolio()
 	d := core.NewDoc(src, filepath.Base(src))
-	f.Append(d)
+	f.AppendDoc(d)
 	d.Output = cobra.GetString("output")
 	d.Text = string(input)
 

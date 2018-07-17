@@ -159,7 +159,7 @@ func (r *Render) exec(n *Cmd) string {
 	// Get the macro definition.
 	m := r.getMacro(name, "")
 	if m == nil {
-		panic(RenderError{message: fmt.Sprintf("Line %d: macro %q not defined.", n.GetLineNum(), name)})
+		panic(RenderError{message: fmt.Sprintf("Line %d: macro %q not defined in exec.", n.GetLineNum(), name)})
 	}
 	cmdLog.Copy().Strunc("macro", m.TemplateText).LogfV("retrieved macro definition")
 
@@ -261,7 +261,7 @@ func (r *Render) processCmd(n *Cmd) string {
 	// Get the macro definition.
 	m := r.getMacro(name, n.Format)
 	if m == nil {
-		panic(RenderError{message: fmt.Sprintf("Line %d: macro %q not defined.", n.GetLineNum(), name)})
+		panic(RenderError{message: fmt.Sprintf("Line %d: macro %q (format %q) not defined.", n.GetLineNum(), name, n.Format)})
 	}
 	cmdLog.Copy().Strunc("macro", m.TemplateText).LogfV("retrieved macro definition")
 
@@ -280,13 +280,6 @@ func (r *Render) processCmd(n *Cmd) string {
 		panic(RenderError{message: fmt.Sprintf("Line %d: ValidateArgs failed on macro %q: %s", n.GetLineNum(), name, err)})
 	}
 
-	// renArgs := map[string]interface{}{}
-	// Data["reflow"] = r.Doc.Reflow
-	// Data["format"] = n.Format
-	// Data["plain"] = r.Doc.Plain
-	// Data["flags"] = n.Flags
-	// renArgs["data"] = Data
-
 	renArgs := newCmdArgs(r.Doc)
 	// Load the validated args into a map for easy access.
 	for k, v := range args {
@@ -303,7 +296,6 @@ func (r *Render) processCmd(n *Cmd) string {
 	cmdLog.Copy().Add("name", name).Add("ld", m.Ld).Logf("executed macro, ready for parsing")
 
 	// Handle commands embedded in the macro.
-	// opts := &Options{Plain: true, Macros: r.macros, Format: n.Format}
 	output, err := ParseMacro(name, s, r.Doc) //(name, s, opts)
 	if err != nil {
 		panic(RenderError{message: fmt.Sprintf("Line %d: error in template for macro %q: %q", n.GetLineNum(), name, err)})

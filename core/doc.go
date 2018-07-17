@@ -1,34 +1,192 @@
 package core
 
 import (
+	"bufio"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/kevinkenan/cobra"
+	yaml "gopkg.in/yaml.v2"
 )
 
 // Folio is a collection of documents.
 type Folio struct {
-	Documents map[DocFile]Document
-	Data      map[string]interface{}
-	Macros    MacroMap
+	Documents      map[DocFile]Document
+	Data           map[string]interface{}
+	Macros         MacroMap
+	Packages       []string          // The requested list of macro packages
+	PkgSearchPaths []string          // Where to look for macro packages
+	PkgSearchIndex int               // Where to begin searching
+	PkgLocations   map[string]string // Paths to all the known packages
 }
 
 func NewFolio() *Folio {
 	return &Folio{
-		Documents: make(map[DocFile]Document),
-		Data:      make(map[string]interface{}),
-		Macros:    NewMacroMap(),
+		Documents:      make(map[DocFile]Document),
+		Data:           make(map[string]interface{}),
+		Macros:         NewMacroMap(),
+		Packages:       []string{},
+		PkgSearchPaths: []string{"packages"},
+		PkgLocations:   make(map[string]string),
 	}
 }
 
-// Append adds the document to the folio.
-func (f *Folio) Append(d *Document) {
+// AppendDoc initializes the document and adds it to the folio.
+func (f *Folio) AppendDoc(d *Document) error {
 	if d.Name == "" || d.Path == "" {
-		panic("missing Name or Path when appending doc")
+		fmt.Errorf("missing Name or Path when appending doc %q", d.Name)
 	}
+
+	if err := d.initDoc(); err != nil {
+		return err
+	}
+
 	d.Folio = f
 	f.Documents[DocFile{FileName: d.Name, FilePath: d.Path}] = *d
+	return nil
+}
+
+// LoadPackages finds packages specified in the Folio and loads their macros.
+func (f *Folio) LoadPackages() error {
+	var err error
+
+	if len(f.Packages) == 0 {
+		return nil
+	}
+
+	var pkgpath string
+
+	// Search for the package.
+	for _, p := range f.Packages {
+		for {
+			if pkgp, found := f.PkgLocations[strings.TrimSuffix(p, ".stm")]; found {
+				pkgpath = pkgp
+				break
+			}
+
+			done, err := f.readNextPackageDir()
+			if err != nil {
+				return err
+			}
+			if done {
+				return fmt.Errorf("unable to find package %s", p)
+			}
+		}
+
+		err = f.readMacroPkg(pkgpath)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (f *Folio) readNextPackageDir() (bool, error) {
+	var files []os.FileInfo
+
+	i := f.PkgSearchIndex
+	if i >= len(f.PkgSearchPaths) {
+		return true, nil
+	}
+
+	pkgd := filepath.Clean(f.PkgSearchPaths[i])
+
+	finfo, err := os.Stat(pkgd)
+	if err != nil {
+		return true, err
+	}
+
+	if !finfo.IsDir() {
+		return true, fmt.Errorf("package path %q is not a directory", pkgd)
+	}
+
+	files, err = ioutil.ReadDir(pkgd)
+	if err != nil {
+		return true, err
+	}
+
+	for _, fi := range files {
+		fp := filepath.Join(pkgd, fi.Name())
+
+		if fi.IsDir() {
+			f.PkgLocations[fi.Name()] = fp
+		} else {
+			switch filepath.Ext(fp) {
+			case ".stm":
+				f.PkgLocations[strings.TrimSuffix(fi.Name(), ".stm")] = fp
+			default:
+				continue
+			}
+		}
+	}
+
+	f.PkgSearchIndex++
+
+	return false, nil
+}
+
+func (f *Folio) readMacroPkg(pkgpath string) error {
+	var err error
+	var files []os.FileInfo
+
+	finfo, err := os.Stat(pkgpath)
+	if err != nil {
+		return err
+	}
+
+	if finfo.IsDir() {
+		files, err = ioutil.ReadDir(pkgpath)
+		if err != nil {
+			return err
+		}
+
+		for _, fi := range files {
+			fp := filepath.Join(pkgpath, fi.Name())
+
+			if fi.IsDir() {
+				// skip nested directories
+				continue
+			}
+
+			switch filepath.Ext(fp) {
+			case ".stm":
+				err = f.readMacros(fp)
+				if err != nil {
+					return err
+				}
+			default:
+				continue
+			}
+		}
+	} else {
+		err = f.readMacros(pkgpath)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (f *Folio) readMacros(fpath string) error {
+	fname := filepath.Base(fpath)
+	fin, err := ioutil.ReadFile(fpath)
+	if err != nil {
+		return err
+	}
+
+	input := string(fin)
+	doc := NewDoc(fname, fpath)
+	doc.Folio = f
+	ParseMacro(fname, input, doc)
+
+	return nil
 }
 
 func (f *Folio) GetMacro(name, format string) *Macro {
@@ -95,6 +253,7 @@ type Document struct {
 	Metadata     map[string]string //
 	Text         string            // The raw text of the file
 	contentBegin int               // The index in Text where the config ends and the content begins
+	Initialized  bool              // True if the document has already been initialized
 	Root         *Section          // The root node of the parsed content
 	Plain        bool              // Don't generate paragraphs or aggressively eat whitespace
 	Reflow       bool              // if true, remove new lines and collapse whitespace in paragraphs
@@ -104,7 +263,79 @@ type Document struct {
 // NewDoc creates a new Document and initializes the macrosIn field.
 func NewDoc(name, path string) *Document {
 	d := Document{Name: name, Path: path}
+	d.Plain = cobra.GetBool("plain")
+	d.Reflow = cobra.GetBool("reflow")
+	d.Format = cobra.GetString("format")
 	return &d
+}
+
+// initDoc loads the file and processes the config section if present.
+func (d *Document) initDoc() (err error) {
+	if d.Initialized {
+		return nil
+	}
+
+	var in []byte
+
+	if d.Path == "<stdin>" {
+		var input []byte
+
+		reader := bufio.NewReader(os.Stdin)
+		for {
+			in, err := reader.ReadByte()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return err
+			}
+			input = append(input, in)
+		}
+
+		d.Text = string(input)
+	} else {
+		in, err = ioutil.ReadFile(d.Path)
+		if err != nil {
+			return
+		}
+		d.Text = string(in)
+	}
+
+	if len(d.Text) < 3 || d.Text[:3] != ">>>" {
+		return nil
+	}
+
+	confEnd := 3 + strings.Index(d.Text, "---\n")
+	if confEnd == -1 {
+		return fmt.Errorf("missing end to config section in %q", d.Name)
+	}
+
+	d.contentBegin = confEnd
+	cfg := make(map[interface{}]interface{})
+	if err = yaml.Unmarshal([]byte(d.Text[4:confEnd]), &cfg); err != nil {
+		return fmt.Errorf("unable to read config for %q: %q", d.Name, err)
+	}
+	cobra.Tag("cmd").LogfV("read config for %q", d.Name)
+
+	for k, v := range cfg {
+		cobra.Tag("cmd").Add("key", k).Add("val", v).LogV("setting config parameter")
+		// cobra.Set(k.(string), v)
+		switch k {
+		case "reflow":
+			d.Reflow = v.(bool)
+		case "format":
+			d.Format = v.(string)
+		case "title":
+			d.Title = v.(string)
+		case "date":
+			d.Date = v.(time.Time)
+		case "ignore":
+			d.Ignore = v.(bool)
+		}
+	}
+
+	d.Initialized = true
+	return nil
 }
 
 // Make renders the document.

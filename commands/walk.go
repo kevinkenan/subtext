@@ -51,7 +51,7 @@ func WalkCmd(cmd *cobra.Command, args []string) {
 	d.Output = cobra.GetString("output")
 	d.Packages = cobra.GetStringSlice("packages")
 	d.Text = string(input)
-	f.Append(d)
+	f.AppendDoc(d)
 	// d.AddMacro(core.NewMacro("paragraph.begin", "<p>", []string{"orig"}, nil))
 	// d.AddMacro(core.NewMacro("paragraph.end", "</p>\n\n", []string{"orig"}, nil))
 	// d.AddMacro(core.NewMacro("title", "<h1>{{.text}}</h1>", []string{"text"}, nil))

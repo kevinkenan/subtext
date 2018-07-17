@@ -59,7 +59,7 @@ func testSelectArguments(t *testing.T, test *selectArgumentsTestCase) {
 	f := NewFolio()
 	f.AddMacro(NewMacro("X", "", nil, nil))
 	f.AddMacro(NewMacro("sys.Z", "", nil, nil))
-	f.Append(&test.command)
+	f.AppendDoc(&test.command)
 
 	root, err := Parse(f.GetDocs()[0])
 
@@ -169,10 +169,11 @@ type parseTestCase struct {
 
 func newPlainTestDoc(s string) Document {
 	return Document{
-		Name:  "testdoc",
-		Path:  "testpath",
-		Text:  s,
-		Plain: true,
+		Name:        "<stdin>",
+		Path:        "<stdin>",
+		Text:        s,
+		Plain:       true,
+		Initialized: true,
 	}
 }
 
@@ -188,7 +189,11 @@ var parseTestCases = []parseTestCase{
 		"Text Node",
 		"Text Node",
 		"Text Node"}},
-	{"bare command", newPlainTestDoc("1 •X[] 3"), "1 •X[] 3", false, []string{
+	{"bare command", newPlainTestDoc("1 •X 3"), "1 •X[] 3", false, []string{
+		"Text Node",
+		"Cmd Node",
+		"Text Node"}},
+	{"empty full command", newPlainTestDoc("1 •X[] 3"), "1 •X[] 3", false, []string{
 		"Text Node",
 		"Cmd Node",
 		"Text Node"}},
@@ -259,10 +264,11 @@ var parseTestCases = []parseTestCase{
 
 func newParTestDoc(s string) Document {
 	return Document{
-		Name:  "testdoc",
-		Path:  "testpath",
-		Text:  s,
-		Plain: false,
+		Name:        "testdoc",
+		Path:        "testpath",
+		Text:        s,
+		Plain:       false,
+		Initialized: true,
 	}
 }
 
@@ -305,10 +311,11 @@ template: "((.text))"
 
 func newFlowTestDoc(s string) Document {
 	return Document{
-		Name:   "testdoc",
-		Path:   "testpath",
-		Text:   s,
-		Reflow: true,
+		Name:        "testdoc",
+		Path:        "testpath",
+		Text:        s,
+		Reflow:      true,
+		Initialized: true,
 	}
 }
 
@@ -388,7 +395,7 @@ func testParse(t *testing.T, tests []parseTestCase, start, end int) {
 		f := NewFolio()
 		f.AddMacro(NewMacro("X", "", nil, nil))
 		f.AddMacro(NewMacro("sys.Z", "", nil, nil))
-		f.Append(&test.doc)
+		f.AppendDoc(&test.doc)
 
 		result, err = Parse(f.GetDocs()[0])
 		if err != nil {

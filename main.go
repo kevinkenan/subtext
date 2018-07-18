@@ -44,6 +44,7 @@ func init() {
 		cobra.NewBoolFlag("reflow", cobra.Opts().Default(false).Desc("reflow paragraphs")),
 		cobra.NewStringFlag("format", cobra.Opts().Desc("the output format")),
 		cobra.NewStringSliceFlag("packages", cobra.Opts().Abbr("p").Desc("macro package(s) to apply to input")),
+		cobra.NewStringSliceFlag("package-dir", cobra.Opts().Desc("path to package directory")),
 		cobra.NewBoolFlag("default-warnings", cobra.Opts().Default(false).Desc("warn when a default macro is used")))
 
 	build := cobra.NewCommand("build")

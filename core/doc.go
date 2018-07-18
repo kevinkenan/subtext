@@ -7,6 +7,8 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,8 +23,9 @@ type Folio struct {
 	Data            map[string]interface{}
 	Macros          MacroMap
 	Packages        []string          // The requested list of macro packages
+	LoadedPackages  map[string]bool   // List of all the loaded packages
 	PkgSearchPaths  []string          // Where to look for macro packages
-	PkgSearchIndex  int               // Where to begin searching
+	PkgSearchIndex  int               // Where to begin searching next
 	PkgLocations    map[string]string // Paths to all the known packages
 	Cmd             *cobra.Command    // The command that created the Folio
 	defaultWarnings map[string]bool   // Map of all default macro warnings
@@ -34,6 +37,7 @@ func NewFolio() *Folio {
 		Data:            make(map[string]interface{}),
 		Macros:          NewMacroMap(),
 		Packages:        []string{},
+		LoadedPackages:  make(map[string]bool),
 		PkgSearchPaths:  []string{"packages"},
 		PkgLocations:    make(map[string]string),
 		defaultWarnings: make(map[string]bool),
@@ -70,20 +74,22 @@ func (f *Folio) AppendDoc(d *Document) error {
 	return nil
 }
 
-// LoadPackages finds packages specified in the Folio and loads their macros.
-func (f *Folio) LoadPackages() error {
+// LoadPackages finds the requested packages and loads their macros.
+func (f *Folio) LoadPackages(pkgs []string) error {
 	var err error
-
-	if len(f.Packages) == 0 {
-		return nil
-	}
-
 	var pkgpath string
 
 	// Search for the package.
-	for _, p := range f.Packages {
+search:
+	for _, p := range pkgs {
+		pkgname := strings.TrimSuffix(p, ".stm")
+
+		if f.LoadedPackages[pkgname] {
+			continue
+		}
+
 		for {
-			if pkgp, found := f.PkgLocations[strings.TrimSuffix(p, ".stm")]; found {
+			if pkgp, found := f.PkgLocations[pkgname]; found {
 				pkgpath = pkgp
 				break
 			}
@@ -92,8 +98,10 @@ func (f *Folio) LoadPackages() error {
 			if err != nil {
 				return err
 			}
+
 			if done {
-				return fmt.Errorf("unable to find package %s", p)
+				cobra.Outf("unable to find package %q", p)
+				continue search
 			}
 		}
 
@@ -101,11 +109,16 @@ func (f *Folio) LoadPackages() error {
 		if err != nil {
 			return err
 		}
+
+		f.LoadedPackages[pkgname] = true
 	}
 
 	return nil
 }
 
+// readNextPackageDir reads the package names in the next directory listed in
+// PkgSearchPaths. If it returns true, then the search is done and there are
+// no more directories to search.
 func (f *Folio) readNextPackageDir() (bool, error) {
 	var files []os.FileInfo
 
@@ -115,10 +128,13 @@ func (f *Folio) readNextPackageDir() (bool, error) {
 	}
 
 	pkgd := filepath.Clean(f.PkgSearchPaths[i])
+	cobra.WithField("directory", pkgd).OutV("searching package path")
 
 	finfo, err := os.Stat(pkgd)
 	if err != nil {
-		return true, err
+		cobra.LogfV("unable to read directory %q: %s", pkgd, err)
+		f.PkgSearchIndex++
+		return false, nil
 	}
 
 	if !finfo.IsDir() {
@@ -151,8 +167,8 @@ func (f *Folio) readNextPackageDir() (bool, error) {
 }
 
 func (f *Folio) readMacroPkg(pkgpath string) error {
-	var err error
-	var files []os.FileInfo
+	// var err error
+	// var files []os.FileInfo
 
 	finfo, err := os.Stat(pkgpath)
 	if err != nil {
@@ -160,9 +176,9 @@ func (f *Folio) readMacroPkg(pkgpath string) error {
 	}
 
 	if finfo.IsDir() {
-		files, err = ioutil.ReadDir(pkgpath)
+		files, err := ioutil.ReadDir(pkgpath)
 		if err != nil {
-			return err
+			return fmt.Errorf("unable to read directory %q: %s", pkgpath, err)
 		}
 
 		for _, fi := range files {
@@ -282,7 +298,7 @@ type Document struct {
 	Date         time.Time         // The date of the document
 	Ignore       bool              // If true, this file is not included in the output
 	Rendered     bool              // True when the document has been rendered and output
-	Packages     []string          //
+	Packages     []string          // List of packages to add.
 	Output       string            // The rendered output
 	Targets      []string          //
 	Metadata     map[string]string //
@@ -363,6 +379,15 @@ func (d *Document) initDoc() (err error) {
 			d.Date = v.(time.Time)
 		case "ignore":
 			d.Ignore = v.(bool)
+		case "packages":
+			d.Packages, err = readPackageList(v)
+			if err != nil {
+				return err
+			}
+			err = d.Folio.LoadPackages(d.Packages)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -378,6 +403,43 @@ func (d *Document) initDoc() (err error) {
 
 	d.Initialized = true
 	return nil
+}
+
+// readPackageList reads the package list passed in from a document's config
+// preamble.
+func readPackageList(list interface{}) ([]string, error) {
+	pkgs := []string{}
+
+	pkgv := reflect.ValueOf(list)
+	if pkgv.Kind() != reflect.Slice {
+		return nil, fmt.Errorf("package config should be a list")
+	}
+
+	for _, item := range list.([]interface{}) {
+		iv := reflect.ValueOf(item.(interface{}))
+
+		switch iv.Kind() {
+		case reflect.String:
+			pkgs = append(pkgs, item.(string))
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			pkgs = append(pkgs, strconv.FormatInt(iv.Int(), 10))
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			pkgs = append(pkgs, strconv.FormatUint(iv.Uint(), 10))
+		case reflect.Float32, reflect.Float64:
+			pkgs = append(pkgs, strconv.FormatFloat(iv.Float(), 'f', -1, 64))
+		case reflect.Bool:
+			pkgs = append(pkgs, strconv.FormatBool(iv.Bool()))
+		default:
+			switch item.(type) {
+			case Stringer:
+				pkgs = append(pkgs, item.(Stringer).String())
+			default:
+				return nil, fmt.Errorf("unknown type in package list: %q (%T)", iv, item)
+			}
+		}
+	}
+
+	return pkgs, nil
 }
 
 // Make renders the document.

@@ -17,6 +17,11 @@ func MakeCmd(cmd *cobra.Command, args []string) error {
 	f := core.NewFolio()
 	f.Cmd = cmd
 
+	for _, pdir := range cobra.GetStringSlice("package-dir") {
+		path = filepath.Clean(pdir)
+		f.PkgSearchPaths = append(f.PkgSearchPaths, path)
+	}
+
 	switch {
 	case len(args) > 1:
 		return fmt.Errorf("make requires zero or one file")
@@ -42,10 +47,13 @@ func MakeCmd(cmd *cobra.Command, args []string) error {
 
 	// d := core.NewDoc(name, "<stdin>")
 	OutputName := cobra.GetString("output")
+
 	f.Packages = cobra.GetStringSlice("packages")
-	err = f.LoadPackages()
-	if err != nil {
-		return err
+	if len(f.Packages) > 0 {
+		err = f.LoadPackages(f.Packages)
+		if err != nil {
+			return err
+		}
 	}
 
 	output, err := f.Make()

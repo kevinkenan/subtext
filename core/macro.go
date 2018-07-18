@@ -78,22 +78,26 @@ func NewMacroMap() MacroMap {
 	return mm
 }
 
-func (mm MacroMap) GetMacro(name, format string) *Macro {
+// GetMacro searches for the named macro with the specified format. If that
+// fails, it looks for a default macro (no format). The function returns the
+// macro and a bool which is true if the macro was found with the requested
+// format.
+func (mm MacroMap) GetMacro(name, format string) (*Macro, bool) {
 	mt := MacroType{name, format}
 	mac, found := mm[mt]
 	if found {
 		cobra.Tag("cmd").Add("name", mt.Name).Add("format", mt.Format).LogV("get macro definition")
-		return mac
+		return mac, true
 	}
 
 	mt.Format = ""
 	mac, found = mm[mt]
 	if found {
 		cobra.Tag("cmd").Add("name", mt.Name).LogV("get macro definition (default)")
-		return mac
+		return mac, false
 	}
 
-	return nil
+	return nil, false
 }
 
 // AddMacro adds a single Macro to the map.
@@ -232,7 +236,7 @@ func (m *Macro) ValidateArgs(c *Cmd, d *Document) (NodeMap, error) {
 func (p *parser) addNewMacro(n *Cmd, flowStyle bool) error {
 	name := "sys.newmacro"
 	// Retrieve the sys.newmacro system command
-	d := p.GetMacro(name, "")
+	d := p.GetSysMacro(name, "")
 	if d == nil {
 		return fmt.Errorf("Line %d: system command %q not defined.", n.GetLineNum(), name)
 	}

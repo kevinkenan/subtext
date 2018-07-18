@@ -118,6 +118,11 @@ func (p *parser) GetMacro(name, format string) *Macro {
 	return p.doc.Folio.GetMacro(name, format)
 }
 
+// GetMacro is a convenience function to get a macro.
+func (p *parser) GetSysMacro(name, format string) *Macro {
+	return p.doc.Folio.GetSysMacro(name, format)
+}
+
 // AddMacro is a convenience function to add a macro.
 func (p *parser) AddMacro(m *Macro) {
 	p.doc.Folio.AddMacro(m)

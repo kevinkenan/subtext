@@ -11,29 +11,47 @@ import (
 	"time"
 
 	"github.com/kevinkenan/cobra"
+	"github.com/spf13/pflag"
 	yaml "gopkg.in/yaml.v2"
 )
 
 // Folio is a collection of documents.
 type Folio struct {
-	Documents      map[DocFile]Document
-	Data           map[string]interface{}
-	Macros         MacroMap
-	Packages       []string          // The requested list of macro packages
-	PkgSearchPaths []string          // Where to look for macro packages
-	PkgSearchIndex int               // Where to begin searching
-	PkgLocations   map[string]string // Paths to all the known packages
+	Documents       map[DocFile]Document
+	Data            map[string]interface{}
+	Macros          MacroMap
+	Packages        []string          // The requested list of macro packages
+	PkgSearchPaths  []string          // Where to look for macro packages
+	PkgSearchIndex  int               // Where to begin searching
+	PkgLocations    map[string]string // Paths to all the known packages
+	Cmd             *cobra.Command    // The command that created the Folio
+	defaultWarnings map[string]bool   // Map of all default macro warnings
 }
 
 func NewFolio() *Folio {
 	return &Folio{
-		Documents:      make(map[DocFile]Document),
-		Data:           make(map[string]interface{}),
-		Macros:         NewMacroMap(),
-		Packages:       []string{},
-		PkgSearchPaths: []string{"packages"},
-		PkgLocations:   make(map[string]string),
+		Documents:       make(map[DocFile]Document),
+		Data:            make(map[string]interface{}),
+		Macros:          NewMacroMap(),
+		Packages:        []string{},
+		PkgSearchPaths:  []string{"packages"},
+		PkgLocations:    make(map[string]string),
+		defaultWarnings: make(map[string]bool),
 	}
+}
+
+func (f *Folio) CheckFlag(fname string) (flagged bool) {
+	if f.Cmd == nil {
+		return
+	}
+
+	f.Cmd.Flags().Visit(func(flag *pflag.Flag) {
+		if flag.Name == fname {
+			flagged = true
+		}
+	})
+
+	return
 }
 
 // AppendDoc initializes the document and adds it to the folio.
@@ -42,11 +60,12 @@ func (f *Folio) AppendDoc(d *Document) error {
 		fmt.Errorf("missing Name or Path when appending doc %q", d.Name)
 	}
 
+	d.Folio = f
+
 	if err := d.initDoc(); err != nil {
 		return err
 	}
 
-	d.Folio = f
 	f.Documents[DocFile{FileName: d.Name, FilePath: d.Path}] = *d
 	return nil
 }
@@ -189,8 +208,24 @@ func (f *Folio) readMacros(fpath string) error {
 	return nil
 }
 
-func (f *Folio) GetMacro(name, format string) *Macro {
-	return f.Macros.GetMacro(name, format)
+func (f *Folio) GetMacro(name, format string) (mac *Macro) {
+	mac, found := f.Macros.GetMacro(name, format)
+	if mac == nil {
+		return
+	}
+
+	warned := f.defaultWarnings[name]
+	if !found && cobra.GetBool("default-warnings") && !warned {
+		cobra.Outf("warning: default macro used: %q", name)
+		f.defaultWarnings[name] = true
+	}
+
+	return
+}
+
+func (f *Folio) GetSysMacro(name, format string) (mac *Macro) {
+	mac, _ = f.Macros.GetMacro(name, format)
+	return
 }
 
 // AddMacro adds a single Macro to the map.
@@ -263,9 +298,6 @@ type Document struct {
 // NewDoc creates a new Document and initializes the macrosIn field.
 func NewDoc(name, path string) *Document {
 	d := Document{Name: name, Path: path}
-	d.Plain = cobra.GetBool("plain")
-	d.Reflow = cobra.GetBool("reflow")
-	d.Format = cobra.GetString("format")
 	return &d
 }
 
@@ -334,6 +366,16 @@ func (d *Document) initDoc() (err error) {
 		}
 	}
 
+	if d.Folio.CheckFlag("plain") {
+		d.Plain = cobra.GetBool("plain")
+	}
+	if d.Folio.CheckFlag("reflow") {
+		d.Reflow = cobra.GetBool("reflow")
+	}
+	if d.Folio.CheckFlag("format") {
+		d.Format = cobra.GetString("format")
+	}
+
 	d.Initialized = true
 	return nil
 }
@@ -370,5 +412,7 @@ func MakeWith(r *Render) (s string, err error) {
 
 	//r.addMacros(macros)
 	cobra.LogV("rendering (render)")
-	return r.render(root), nil
+	out := r.render(root)
+	r.Doc.Rendered = true
+	return out, nil
 }

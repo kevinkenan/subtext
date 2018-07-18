@@ -15,6 +15,7 @@ func MakeCmd(cmd *cobra.Command, args []string) error {
 	cmd.SilenceUsage = true
 	var name, path string
 	f := core.NewFolio()
+	f.Cmd = cmd
 
 	switch {
 	case len(args) > 1:
@@ -31,11 +32,6 @@ func MakeCmd(cmd *cobra.Command, args []string) error {
 		cobra.WithField("files", args).Log("reading file")
 		name = args[0]
 		path = filepath.Clean(name)
-
-		// in, err := ioutil.ReadFile(f)
-		// if err != nil {
-		// 	return err
-		// }
 
 		d := core.NewDoc(name, path)
 		if err := f.AppendDoc(d); err != nil {

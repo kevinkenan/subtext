@@ -13,17 +13,40 @@ import (
 	"github.com/kevinkenan/subtext/core"
 )
 
-func Build(cmd *cobra.Command, args []string) (err error) {
+const (
+	buildDesc = `Copies the contents from the specified to directory to the output directory,
+processing subtext files as it goes.
+`
+)
+
+func Build() (cmd *cobra.Command) {
+	cmd = cobra.NewCommand("build")
+	cmd.Short = "create a site"
+	cmd.Long = buildDesc
+	cmd.RunE = BuildRunE
+	cmd.AddFlags(
+		cobra.NewStringFlag("output", cobra.Opts().Abbr("o").Req(true).Desc("path to the output directory")),
+		cobra.NewBoolFlag("recurse", cobra.Opts().Default(false).Desc("includes contents of subdirectories")),
+		cobra.NewBoolFlag("reflow", cobra.Opts().Default(false).Desc("reflow paragraphs")),
+		cobra.NewStringFlag("format", cobra.Opts().Desc("the output format")),
+		cobra.NewStringSliceFlag("packages", cobra.Opts().Abbr("p").Desc("macro package(s) to apply to input")))
+
+	return
+}
+
+func BuildRunE(cmd *cobra.Command, args []string) (err error) {
 	cobra.Log("beginning build cmd")
 	cmd.SilenceUsage = true
 
 	if len(args) == 0 {
 		return fmt.Errorf("you must specify a source directory")
 	} else {
-		cobra.WithField("files", args).Log("processing ")
-		outf := cobra.GetString("output")
-		for _, f := range args {
-			err = copyDir(f, outf)
+		cobra.WithField("files", args).Log("processing")
+		outdir := cobra.GetString("output")
+		f := core.NewFolio()
+
+		for _, a := range args {
+			err = copyDir(a, outdir, f)
 			if err != nil {
 				return err
 			}
@@ -33,42 +56,45 @@ func Build(cmd *cobra.Command, args []string) (err error) {
 	return nil
 }
 
-func copyDir(src string, dst string) (err error) {
+func copyDir(src, outdir string, folio *core.Folio) (err error) {
 	src = filepath.Clean(src)
-	dst = filepath.Clean(dst)
+	outdir = filepath.Clean(outdir)
 
-	si, err := os.Stat(src)
+	srcInfo, err := os.Stat(src)
 	if err != nil {
-		return err
+		return fmt.Errorf("copydir src: %s", err)
 	}
-	if !si.IsDir() {
+	if !srcInfo.IsDir() {
 		return fmt.Errorf("source is not a directory")
 	}
 
-	_, err = os.Stat(dst)
-	if err != nil && !os.IsNotExist(err) {
-		return
-	}
+	_, err = os.Stat(outdir)
 	if err != nil {
-		err = os.MkdirAll(dst, si.Mode())
-		if err != nil {
-			return
+		if os.IsNotExist(err) {
+			err = os.MkdirAll(outdir, srcInfo.Mode())
+			if err != nil {
+				return fmt.Errorf("unable to create output directory: %s", err)
+			}
+		} else {
+			return fmt.Errorf("unable to read output directory: %s", err)
 		}
 	}
 
 	entries, err := ioutil.ReadDir(src)
 	if err != nil {
-		return
+		return fmt.Errorf("unable to read source directory: %s", err)
 	}
 
 	indexes := []string{}
 
 	for _, entry := range entries {
-		srcPath := filepath.Join(src, entry.Name())
-		dstPath := filepath.Join(dst, entry.Name())
+		srcpath := filepath.Join(src, entry.Name())
+		// dstPath := dst
+		// dstPath := filepath.Join(dst, entry.Name())
 
 		if entry.IsDir() {
-			err = copyDir(srcPath, dstPath)
+			subdir := filepath.Join(outdir, entry.Name())
+			err = copyDir(srcpath, subdir, folio)
 			if err != nil {
 				return
 			}
@@ -78,21 +104,21 @@ func copyDir(src string, dst string) (err error) {
 				continue
 			}
 
-			switch filepath.Ext(srcPath) {
+			switch filepath.Ext(srcpath) {
 			case ".stm":
 				// skip
 			case ".st":
-				if strings.HasPrefix(filepath.Base(srcPath), "index.") {
-					indexes = append(indexes, srcPath)
+				if strings.HasPrefix(filepath.Base(srcpath), "index.") {
+					indexes = append(indexes, srcpath)
 					continue
 				}
 
-				err = makeFile(srcPath, dstPath)
+				err = makeFile(srcpath, outdir, folio)
 				if err != nil {
 					return
 				}
 			default:
-				err = copyFile(srcPath, dstPath)
+				err = copyFile(srcpath, outdir)
 				if err != nil {
 					return
 				}
@@ -103,26 +129,35 @@ func copyDir(src string, dst string) (err error) {
 	return
 }
 
-func makeFile(src, dst string) (err error) {
+func makeFile(src, outdir string, folio *core.Folio) (err error) {
 	input, err := ioutil.ReadFile(src)
 	if err != nil {
-		return err
+		return fmt.Errorf("makefile: %s", err)
 	}
 
-	f := core.NewFolio()
-	d := core.NewDoc(src, filepath.Base(src))
-	f.AppendDoc(d)
-	d.Output = cobra.GetString("output")
+	srcname := filepath.Base(src)
+	d := core.NewDoc(srcname, src)
+	folio.AppendDoc(d)
 	d.Text = string(input)
 
 	output, err := d.Make()
 	if err != nil {
-		return err
+		return
 	}
 
-	fo, err := os.Create(dst)
+	outname := d.OutputName
+	if d.OutputName == "" {
+		outname = fmt.Sprintf("%s.%s", strings.TrimSuffix(srcname, ".st"), d.Format)
+	}
+
+	dstpath, err := filepath.Abs(filepath.Join(outdir, outname))
 	if err != nil {
-		return err
+		return fmt.Errorf("makefile: %s", err)
+	}
+
+	fo, err := os.Create(dstpath)
+	if err != nil {
+		return fmt.Errorf("makefile: %s", err)
 	}
 	defer func() {
 		if e := fo.Close(); e != nil {
@@ -132,37 +167,40 @@ func makeFile(src, dst string) (err error) {
 
 	_, err = fo.WriteString(output)
 	if err != nil {
-		return
+		return fmt.Errorf("makefile: %s", err)
 	}
 
 	err = fo.Sync()
 	if err != nil {
-		return
+		return fmt.Errorf("makefile: %s", err)
 	}
 
 	si, err := os.Stat(src)
 	if err != nil {
-		return
+		return fmt.Errorf("makefile: %s", err)
 	}
 
-	err = os.Chmod(dst, si.Mode())
+	err = os.Chmod(dstpath, si.Mode())
 	if err != nil {
-		return
+		return fmt.Errorf("makefile: %s", err)
 	}
 
 	return
 }
 
-func copyFile(src, dst string) (err error) {
+func copyFile(src, outdir string) (err error) {
+	fname := filepath.Base(src)
+	dst := filepath.Join(outdir, fname)
+
 	in, err := os.Open(src)
 	if err != nil {
-		return
+		return fmt.Errorf("copyfile: %s", err)
 	}
 	defer in.Close()
 
 	out, err := os.Create(dst)
 	if err != nil {
-		return
+		return fmt.Errorf("copyfile: %s", err)
 	}
 	defer func() {
 		if e := out.Close(); e != nil {
@@ -172,22 +210,22 @@ func copyFile(src, dst string) (err error) {
 
 	_, err = io.Copy(out, in)
 	if err != nil {
-		return
+		return fmt.Errorf("copyfile: %s", err)
 	}
 
 	err = out.Sync()
 	if err != nil {
-		return
+		return fmt.Errorf("copyfile: %s", err)
 	}
 
 	si, err := os.Stat(src)
 	if err != nil {
-		return
+		return fmt.Errorf("copyfile: %s", err)
 	}
 
 	err = os.Chmod(dst, si.Mode())
 	if err != nil {
-		return
+		return fmt.Errorf("copyfile: %s", err)
 	}
 
 	return

@@ -11,7 +11,14 @@ import (
 	"github.com/kevinkenan/subtext/core"
 )
 
-func WalkCmd(cmd *cobra.Command, args []string) {
+func Walk() (cmd *cobra.Command) {
+	cmd = cobra.NewCommand("walk")
+	cmd.Short = "walk the parse tree and print info about each node"
+	cmd.Run = WalkRunE
+	return
+}
+
+func WalkRunE(cmd *cobra.Command, args []string) {
 	cobra.Log("beginning walk cmd")
 	cmd.SilenceUsage = true
 	name := ""

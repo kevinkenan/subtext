@@ -9,7 +9,23 @@ import (
 	"github.com/kevinkenan/subtext/core"
 )
 
-func MakeCmd(cmd *cobra.Command, args []string) error {
+func Make() (cmd *cobra.Command) {
+	cmd = cobra.NewCommand("make")
+	cmd.Short = "create a new document"
+	cmd.RunE = MakeRunE
+	cmd.AddFlags(
+		cobra.NewStringFlag("output", cobra.Opts().Abbr("o").Default("-").Desc("path to the output file")),
+		cobra.NewBoolFlag("plain", cobra.Opts().Default(false).Desc("process the text in plain mode")),
+		cobra.NewBoolFlag("reflow", cobra.Opts().Default(false).Desc("reflow paragraphs")),
+		cobra.NewStringFlag("format", cobra.Opts().Desc("the output format")),
+		cobra.NewStringSliceFlag("packages", cobra.Opts().Abbr("p").Desc("macro package(s) to apply to input")),
+		cobra.NewStringSliceFlag("package-dir", cobra.Opts().Desc("path to a package directory. you may set this multiple times")),
+		cobra.NewBoolFlag("default-warnings", cobra.Opts().Default(false).Desc("warn when a default macro is used")))
+
+	return
+}
+
+func MakeRunE(cmd *cobra.Command, args []string) error {
 	cobra.Log("beginning make cmd")
 	var err error
 	cmd.SilenceUsage = true

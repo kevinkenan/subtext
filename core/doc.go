@@ -379,6 +379,8 @@ func (d *Document) initDoc() (err error) {
 			d.Date = v.(time.Time)
 		case "ignore":
 			d.Ignore = v.(bool)
+		case "output":
+			d.Output = v.(string)
 		case "packages":
 			d.Packages, err = readPackageList(v)
 			if err != nil {

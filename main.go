@@ -35,34 +35,9 @@ func init() {
 	app.Version = "0.0.1"
 	app.RunE = AppMain
 
-	makedoc := cobra.NewCommand("make")
-	makedoc.Short = "create a new document"
-	makedoc.RunE = commands.MakeCmd
-	makedoc.AddFlags(
-		cobra.NewStringFlag("output", cobra.Opts().Abbr("o").Default("-").Desc("path to the output file")),
-		cobra.NewBoolFlag("plain", cobra.Opts().Default(false).Desc("process the text in plain mode")),
-		cobra.NewBoolFlag("reflow", cobra.Opts().Default(false).Desc("reflow paragraphs")),
-		cobra.NewStringFlag("format", cobra.Opts().Desc("the output format")),
-		cobra.NewStringSliceFlag("packages", cobra.Opts().Abbr("p").Desc("macro package(s) to apply to input")),
-		cobra.NewStringSliceFlag("package-dir", cobra.Opts().Desc("path to package directory")),
-		cobra.NewBoolFlag("default-warnings", cobra.Opts().Default(false).Desc("warn when a default macro is used")))
-
-	build := cobra.NewCommand("build")
-	build.Short = "create a site"
-	build.Long = `Copies the contents from the specified to directory to the output directory,
-processing subtext files as it goes.
-`
-	build.RunE = commands.Build
-	build.AddFlags(
-		cobra.NewStringFlag("output", cobra.Opts().Abbr("o").Req(true).Desc("path to the output directory")),
-		cobra.NewBoolFlag("recurse", cobra.Opts().Default(false).Desc("includes contents of subdirectories")),
-		cobra.NewBoolFlag("reflow", cobra.Opts().Default(false).Desc("reflow paragraphs")),
-		cobra.NewStringFlag("format", cobra.Opts().Desc("the output format")),
-		cobra.NewStringSliceFlag("packages", cobra.Opts().Abbr("p").Desc("macro package(s) to apply to input")))
-
-	walk := cobra.NewCommand("walk")
-	walk.Short = "walk the parse tree and print info about each node"
-	walk.Run = commands.WalkCmd
+	makedoc := commands.Make()
+	build := commands.Build()
+	walk := commands.Walk()
 
 	// command structure
 	root := cobra.Init(app, cfg)

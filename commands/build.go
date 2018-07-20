@@ -1,7 +1,6 @@
 package commands
 
 import (
-	// "bufio"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -29,6 +28,7 @@ func Build() (cmd *cobra.Command) {
 		cobra.NewBoolFlag("recurse", cobra.Opts().Default(false).Desc("includes contents of subdirectories")),
 		cobra.NewBoolFlag("reflow", cobra.Opts().Default(false).Desc("reflow paragraphs")),
 		cobra.NewStringFlag("format", cobra.Opts().Desc("the output format")),
+		cobra.NewStringSliceFlag("package-dir", cobra.Opts().Desc("path to a package directory. you may set this multiple times")),
 		cobra.NewStringSliceFlag("packages", cobra.Opts().Abbr("p").Desc("macro package(s) to apply to input")))
 
 	return
@@ -40,16 +40,29 @@ func BuildRunE(cmd *cobra.Command, args []string) (err error) {
 
 	if len(args) == 0 {
 		return fmt.Errorf("you must specify a source directory")
-	} else {
-		cobra.WithField("files", args).Log("processing")
-		outdir := cobra.GetString("output")
-		f := core.NewFolio()
+	}
 
-		for _, a := range args {
-			err = copyDir(a, outdir, f)
-			if err != nil {
-				return err
-			}
+	cobra.WithField("files", args).Log("processing")
+	outdir := cobra.GetString("output")
+	f := core.NewFolio()
+
+	for _, pdir := range cobra.GetStringSlice("package-dir") {
+		path := filepath.Clean(pdir)
+		f.PkgSearchPaths = append(f.PkgSearchPaths, path)
+	}
+
+	f.Packages = cobra.GetStringSlice("packages")
+	if len(f.Packages) > 0 {
+		err = f.LoadPackages(f.Packages)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, a := range args {
+		err = copyDir(a, outdir, f)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -89,8 +102,6 @@ func copyDir(src, outdir string, folio *core.Folio) (err error) {
 
 	for _, entry := range entries {
 		srcpath := filepath.Join(src, entry.Name())
-		// dstPath := dst
-		// dstPath := filepath.Join(dst, entry.Name())
 
 		if entry.IsDir() {
 			subdir := filepath.Join(outdir, entry.Name())

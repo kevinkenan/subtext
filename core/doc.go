@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/kevinkenan/cobra"
+	homedir "github.com/mitchellh/go-homedir"
 	"github.com/spf13/pflag"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -32,13 +33,20 @@ type Folio struct {
 }
 
 func NewFolio() *Folio {
+	userhome, err := homedir.Dir()
+	if err != nil {
+		cobra.Outf("Warning: unable to locate home directory: %s", err)
+	}
+
+	userpkg := filepath.Join(userhome, ".subtext", "packages")
+
 	return &Folio{
 		Documents:       make(map[DocFile]Document),
 		Data:            make(map[string]interface{}),
 		Macros:          NewMacroMap(),
 		Packages:        []string{},
 		LoadedPackages:  make(map[string]bool),
-		PkgSearchPaths:  []string{"packages"},
+		PkgSearchPaths:  []string{"packages", userpkg},
 		PkgLocations:    make(map[string]string),
 		defaultWarnings: make(map[string]bool),
 	}
@@ -128,7 +136,7 @@ func (f *Folio) readNextPackageDir() (bool, error) {
 	}
 
 	pkgd := filepath.Clean(f.PkgSearchPaths[i])
-	cobra.WithField("directory", pkgd).OutV("searching package path")
+	cobra.WithField("directory", pkgd).LogV("searching package path")
 
 	finfo, err := os.Stat(pkgd)
 	if err != nil {
@@ -143,7 +151,7 @@ func (f *Folio) readNextPackageDir() (bool, error) {
 
 	files, err = ioutil.ReadDir(pkgd)
 	if err != nil {
-		return true, err
+		return true, fmt.Errorf("reading package directory: %s", err)
 	}
 
 	for _, fi := range files {

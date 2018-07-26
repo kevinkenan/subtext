@@ -233,21 +233,21 @@ func (m *Macro) ValidateArgs(c *Cmd, d *Document) (NodeMap, error) {
 	return selected, nil
 }
 
-func (p *parser) addNewMacro(n *Cmd, flowStyle bool) error {
+func (mm MacroMap) addNewMacro(cmd *Cmd, doc *Document, flowStyle bool) error {
 	name := "sys.newmacro"
 	// Retrieve the sys.newmacro system command
-	d := p.GetSysMacro(name, "")
-	if d == nil {
-		return fmt.Errorf("Line %d: system command %q not defined.", n.GetLineNum(), name)
+	m, _ := mm.GetMacro(name, "")
+	if m == nil {
+		return fmt.Errorf("Line %d: system command %q not defined.", cmd.GetLineNum(), name)
 	}
-	cobra.Tag("cmd").Strunc("macro", d.TemplateText).LogfV("retrieved system command definition")
+	cobra.Tag("cmd").Strunc("macro", m.TemplateText).LogfV("retrieved system command definition")
 
-	args, err := d.ValidateArgs(n, p.doc)
+	args, err := m.ValidateArgs(cmd, doc)
 	if err != nil {
-		return fmt.Errorf("Line %d: ValidateArgs failed on system command %q: %q", n.GetLineNum(), name, err)
+		return fmt.Errorf("Line %d: ValidateArgs failed on system command %q: %q", cmd.GetLineNum(), name, err)
 	}
-
 	cobra.Tag("cmd").Strunc("syscmd", args["def"].String()).LogfV("system command: %s", args["def"])
+
 	var mdef MacroDef
 
 	if flowStyle {
@@ -257,7 +257,7 @@ func (p *parser) addNewMacro(n *Cmd, flowStyle bool) error {
 	}
 
 	if err != nil {
-		return fmt.Errorf("Line %d: unmarshall error for system command %q: %q", n.GetLineNum(), name, err)
+		return fmt.Errorf("Line %d: unmarshall error for system command %q: %q", cmd.GetLineNum(), name, err)
 	}
 	cobra.Tag("cmd").LogfV("marshalled syscmd: %+v", mdef)
 
@@ -276,7 +276,7 @@ func (p *parser) addNewMacro(n *Cmd, flowStyle bool) error {
 		right = "]]"
 	}
 
-	m := &Macro{
+	nm := &Macro{
 		Name:         mdef.Name,
 		TemplateText: mdef.Template,
 		Init:         mdef.Init,
@@ -289,14 +289,79 @@ func (p *parser) addNewMacro(n *Cmd, flowStyle bool) error {
 		Rd:           right,
 	}
 
-	m.Parse()
+	nm.Parse()
 	// mt := MacroType{m.Name, m.Format}
 	// p.macros[mt] = m // TODO: remove the parse.macro struct
 	// Macros[mt] = m
-	p.AddMacro(m)
+	mm.AddMacro(nm)
 	cobra.Tag("cmd").LogfV("loaded new macro")
 	return nil
 }
+
+// func (p *parser) addNewMacroOld(n *Cmd, flowStyle bool) error {
+// 	name := "sys.newmacro"
+// 	// Retrieve the sys.newmacro system command
+// 	d := p.GetSysMacro(name, "")
+// 	if d == nil {
+// 		return fmt.Errorf("Line %d: system command %q not defined.", n.GetLineNum(), name)
+// 	}
+// 	cobra.Tag("cmd").Strunc("macro", d.TemplateText).LogfV("retrieved system command definition")
+
+// 	args, err := d.ValidateArgs(n, p.doc)
+// 	if err != nil {
+// 		return fmt.Errorf("Line %d: ValidateArgs failed on system command %q: %q", n.GetLineNum(), name, err)
+// 	}
+
+// 	cobra.Tag("cmd").Strunc("syscmd", args["def"].String()).LogfV("system command: %s", args["def"])
+// 	var mdef MacroDef
+
+// 	if flowStyle {
+// 		err = yaml.Unmarshal([]byte("{"+args["def"].String()+"}"), &mdef)
+// 	} else {
+// 		err = yaml.Unmarshal([]byte(args["def"].String()), &mdef)
+// 	}
+
+// 	if err != nil {
+// 		return fmt.Errorf("Line %d: unmarshall error for system command %q: %q", n.GetLineNum(), name, err)
+// 	}
+// 	cobra.Tag("cmd").LogfV("marshalled syscmd: %+v", mdef)
+
+// 	opts := []*Optional{}
+// 	for _, opt := range mdef.Optionals {
+// 		opts = append(opts, NewOptional(opt.Key.(string), opt.Value.(string)))
+// 	}
+
+// 	left, right := mdef.Delims[0], mdef.Delims[1]
+
+// 	if left == "" {
+// 		left = "[["
+// 	}
+
+// 	if right == "" {
+// 		right = "]]"
+// 	}
+
+// 	m := &Macro{
+// 		Name:         mdef.Name,
+// 		TemplateText: mdef.Template,
+// 		Init:         mdef.Init,
+// 		Parameters:   mdef.Parameters,
+// 		Optionals:    opts,
+// 		Format:       mdef.Format,
+// 		Block:        mdef.Block,
+// 		Series:       mdef.Series,
+// 		Ld:           left,
+// 		Rd:           right,
+// 	}
+
+// 	m.Parse()
+// 	// mt := MacroType{m.Name, m.Format}
+// 	// p.macros[mt] = m // TODO: remove the parse.macro struct
+// 	// Macros[mt] = m
+// 	p.AddMacro(m)
+// 	cobra.Tag("cmd").LogfV("loaded new macro")
+// 	return nil
+// }
 
 // func (p *parser) addData(n *Cmd, flowStyle bool) error {
 // 	cobra.Tag("cmd").LogfV("begin addData")

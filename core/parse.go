@@ -36,6 +36,38 @@ func Parse(d *Document) (*Section, error) {
 	// }
 
 	return doParse(d.Name, p)
+} // Parse creates a node tree from the tokens produced by scan.
+func ParseText(text string, plain bool, d *Document) (*Section, error) {
+	cobra.Tag("parse").WithField("name", d.Name).Add("plain", d.Plain).LogV("parsing input (parse)")
+
+	s := NewScanner(d.Name, text, plain, d)
+
+	p := &parser{
+		doc:     d,
+		macro:   true,
+		scanner: scanWith(s),
+		root:    NewSection(),
+		empty:   true,
+		// reflow:  d.Reflow,
+	}
+
+	if plain {
+		p.parMode = false
+		p.parScanOn = false
+		p.parScanFlag = false
+		p.insidePar = false
+	} else {
+		p.parMode = true
+		p.parScanOn = true
+		p.parScanFlag = true
+		p.insidePar = false
+	}
+
+	// for _, m := range d.macrosIn {
+	// 	p.macros[MacroType{m.Name, m.Format}] = m
+	// }
+
+	return doParse(d.Name, p)
 }
 
 func ParseMacro(name, input string, doc *Document) (*Section, error) {
@@ -43,6 +75,7 @@ func ParseMacro(name, input string, doc *Document) (*Section, error) {
 	//opts := &Options{Plain: true, Macros: r.macros, Format: n.Format}
 	p := &parser{
 		doc:     doc,
+		macro:   true,
 		scanner: scanMacro(name, input, doc),
 		root:    NewSection(),
 		empty:   true,
@@ -92,13 +125,14 @@ type pstate struct {
 
 // parser represents the current state of the parser.
 type parser struct {
-	doc      *Document
-	scanner  *scanner //
-	root     *Section // Root node of the tree.
-	input    string
-	empty    bool   // true if the buffer is empty.
-	buffer   *token // holds the next token if we peek or backup.
-	prevNode Node   // the previous node
+	doc      *Document //
+	scanner  *scanner  //
+	macro    bool      // True if we are parsing a macro
+	root     *Section  // Root node of the tree.
+	input    string    //
+	empty    bool      // true if the buffer is empty.
+	buffer   *token    // holds the next token if we peek or backup.
+	prevNode Node      // the previous node
 	// reflow             bool
 	stateStack         []*pstate
 	cmdDepth           int
@@ -221,6 +255,17 @@ func appendNode(nl NodeList, ns ...Node) NodeList {
 func (p *parser) start() (n *Section, err error) {
 	defer p.recover(&err)
 	cobra.Tag("parse").LogV("parse start")
+
+	// if p.doc.Template != "" && !p.macro {
+	// 	n := NewCmdNode(p.doc.Template+".begin", &token{
+	// 		typeof: tokenCmdStart,
+	// 		loc:    Loc(0),
+	// 		lnum:   0,
+	// 		value:  "",
+	// 	})
+	// 	p.root.append(NodeList{n})
+	// }
+
 	for {
 		nl, done, err := p.parseBody()
 		if err != nil {
@@ -231,6 +276,17 @@ func (p *parser) start() (n *Section, err error) {
 			break
 		}
 	}
+
+	// if p.doc.Template != "" && !p.macro {
+	// 	n := NewCmdNode(p.doc.Template+".end", &token{
+	// 		typeof: tokenCmdStart,
+	// 		loc:    p.scanner.scanFile.pos,
+	// 		lnum:   p.scanner.scanFile.line,
+	// 		value:  "",
+	// 	})
+	// 	p.root.append(NodeList{n})
+	// }
+
 	return p.root, nil
 }
 
@@ -446,9 +502,9 @@ func (p *parser) parseSysCmd(t *token, nl *NodeList) {
 
 	switch cmd.GetCmdName() {
 	case "sys.newmacrof":
-		err = p.addNewMacro(cmd, true)
+		err = p.doc.Folio.Macros.addNewMacro(cmd, p.doc, true)
 	case "sys.newmacro":
-		err = p.addNewMacro(cmd, false)
+		err = p.doc.Folio.Macros.addNewMacro(cmd, p.doc, false)
 	// case "sys.configf":
 	// 	err = p.processSysConfigCmd(cmd, true)
 	// case "sys.config":

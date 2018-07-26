@@ -83,10 +83,10 @@ func (r *Render) renderNode(n Node) string {
 		cobra.Tag("render").LogV("rendering section node")
 		s.WriteString(r.renderSection(n.(*Section)))
 	case *Text:
-		if r.init {
-			cobra.Tag("render").LogV("init mode so skipping text render")
-			return ""
-		}
+		// if r.init {
+		// 	cobra.Tag("render").LogV("init mode so skipping text render")
+		// 	return ""
+		// }
 
 		cobra.Tag("render").LogV("rendering text")
 		text := n.(*Text).GetText()
@@ -168,21 +168,15 @@ func (r *Render) exec(n *Cmd) string {
 		panic(RenderError{message: fmt.Sprintf("Line %d: ValidateArgs failed on macro %q: %q", n.GetLineNum(), name, err)})
 	}
 
-	// Load the validated args into a map for easy access.
-	renArgs := map[string]interface{}{}
+	// renArgs := map[string]interface{}{}
+	renArgs := newCmdArgs(r.Doc)
 	for k, v := range args {
-		renArgs[k] = v.String()
+		renArgs[k] = r.renderNodeList(v)
+		// renArgs[k] = v.String()
 		cmdLog.Copy().Strunc("arg", k).Strunc("val", v).LogV("prepared command argument")
 	}
 
-	m = NewBlockMacro("anon", renArgs["template"].(string), nil, nil)
-
-	// renArgs = map[string]interface{}{}
-	Data["reflow"] = r.Doc.Reflow
-	Data["format"] = n.Format
-	Data["plain"] = r.Doc.Plain
-	Data["flags"] = n.Flags
-	renArgs["data"] = Data
+	m = NewBlockMacro("exec", renArgs["template"].(string), nil, nil)
 
 	// Apply the command's arguments to the macro.
 	s, err := r.ExecuteMacro(m, renArgs, false)
@@ -254,6 +248,7 @@ func newCmdArgs(d *Document) (c cmdArgs) {
 }
 
 func (r *Render) processCmd(n *Cmd) string {
+	var err error
 	name := n.GetCmdName()
 	cobra.Tag("render").WithField("cmd", name).LogV("rendering command (cmd)")
 	cmdLog := cobra.Tag("cmd")
@@ -296,7 +291,15 @@ func (r *Render) processCmd(n *Cmd) string {
 	cmdLog.Copy().Add("name", name).Add("ld", m.Ld).Logf("executed macro, ready for parsing")
 
 	// Handle commands embedded in the macro.
-	output, err := ParseMacro(name, s, r.Doc) //(name, s, opts)
+	var output *Section
+	// plain := false
+
+	// if strings.HasPrefix(name, "paragraph") {
+	// 	plain = true
+	// }
+
+	// output, err = ParseText(s, plain, r.Doc)
+	output, err = ParseMacro(name, s, r.Doc)
 	if err != nil {
 		panic(RenderError{message: fmt.Sprintf("Line %d: error in template for macro %q: %q", n.GetLineNum(), name, err)})
 	}

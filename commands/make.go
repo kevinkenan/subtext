@@ -72,7 +72,7 @@ func MakeRunE(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	output, err := f.Make()
+	output, err := f.MakeDocs()
 	if err != nil {
 		return err
 	}

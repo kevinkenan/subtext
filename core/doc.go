@@ -32,7 +32,7 @@ type Folio struct {
 	defaultWarnings map[string]bool   // Map of all default macro warnings
 }
 
-func NewFolio() *Folio {
+func NewFolio() (f *Folio) {
 	userhome, err := homedir.Dir()
 	if err != nil {
 		cobra.Outf("Warning: unable to locate home directory: %s", err)
@@ -40,7 +40,7 @@ func NewFolio() *Folio {
 
 	userpkg := filepath.Join(userhome, ".subtext", "packages")
 
-	return &Folio{
+	f = &Folio{
 		Documents:       make(map[DocFile]Document),
 		Data:            make(map[string]interface{}),
 		Macros:          NewMacroMap(),
@@ -50,6 +50,12 @@ func NewFolio() *Folio {
 		PkgLocations:    make(map[string]string),
 		defaultWarnings: make(map[string]bool),
 	}
+
+	funcMap["setdata"] = f.SetData
+	funcMap["getdata"] = f.GetData
+	funcMap["indata"] = f.InData
+
+	return
 }
 
 func (f *Folio) CheckFlag(fname string) (flagged bool) {
@@ -217,19 +223,25 @@ func (f *Folio) readMacroPkg(pkgpath string) error {
 	return nil
 }
 
-func (f *Folio) readMacros(fpath string) error {
+func (f *Folio) readMacros(fpath string) (err error) {
 	fname := filepath.Base(fpath)
 	fin, err := ioutil.ReadFile(fpath)
 	if err != nil {
-		return err
+		return
 	}
 
-	input := string(fin)
-	doc := NewDoc(fname, fpath)
-	doc.Folio = f
-	ParseMacro(fname, input, doc)
+	return f.loadMacros(fname, fpath, string(fin))
+}
 
-	return nil
+func (f *Folio) loadMacros(fname, fpath, fin string) (err error) {
+	doc := NewDoc(fname, fpath)
+	doc.Text = fin
+	doc.Plain = true
+	doc.Folio = f
+
+	_, err = MakeWith(&Render{Doc: doc})
+
+	return
 }
 
 func (f *Folio) GetMacro(name, format string) (mac *Macro) {
@@ -262,7 +274,7 @@ func (f *Folio) AddMacros(mm MacroMap) {
 	f.Macros.AddMacros(mm)
 }
 
-func (f *Folio) Make() (s string, err error) {
+func (f *Folio) MakeDocs() (s string, err error) {
 	ds := []string{}
 	// w := new(strings.Builder)
 
@@ -289,6 +301,40 @@ func (f *Folio) GetDocs() (docs []*Document) {
 	return
 }
 
+func (f *Folio) SetData(key string, val interface{}) string {
+	f.Data[key] = val
+	return ""
+}
+
+func (f *Folio) InData(key string) bool {
+	_, found := f.Data[key]
+	return found
+}
+
+func (f *Folio) GetData(key, dflt string) (interface{}, error) {
+	keys := strings.Split(key, ".")
+	var vals interface{}
+	var found bool
+	vals = f.Data
+	for _, k := range keys {
+		switch vals.(type) {
+		case map[string]interface{}:
+			vals, found = vals.(map[string]interface{})[k]
+			if !found {
+				return dflt, nil
+			}
+		case map[interface{}]interface{}:
+			vals = vals.(map[interface{}]interface{})[k]
+		default:
+			vals = dflt
+			return vals, nil
+			// return "", nil
+			// return nil, fmt.Errorf("key %q not found", key)
+		}
+	}
+	return vals, nil
+}
+
 // DocFile represents the location of a text file to be processed.
 type DocFile struct {
 	FileName string
@@ -303,6 +349,7 @@ type Document struct {
 	Path         string            // The file system path to the file
 	Title        string            // The title of the document
 	OutputName   string            // The name of the output file
+	Template     string            // The name of the wrapper template
 	Date         time.Time         // The date of the document
 	Ignore       bool              // If true, this file is not included in the output
 	Rendered     bool              // True when the document has been rendered and output
@@ -331,30 +378,11 @@ func (d *Document) initDoc() (err error) {
 		return nil
 	}
 
-	var in []byte
-
-	if d.Path == "<stdin>" {
-		var input []byte
-
-		reader := bufio.NewReader(os.Stdin)
-		for {
-			in, err := reader.ReadByte()
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				return err
-			}
-			input = append(input, in)
-		}
-
-		d.Text = string(input)
-	} else {
-		in, err = ioutil.ReadFile(d.Path)
+	if d.Text == "" {
+		err = d.loadText()
 		if err != nil {
 			return
 		}
-		d.Text = string(in)
 	}
 
 	if len(d.Text) < 3 || d.Text[:3] != ">>>" {
@@ -389,6 +417,8 @@ func (d *Document) initDoc() (err error) {
 			d.Ignore = v.(bool)
 		case "output":
 			d.Output = v.(string)
+		case "template":
+			d.Template = v.(string)
 		case "packages":
 			d.Packages, err = readPackageList(v)
 			if err != nil {
@@ -413,6 +443,40 @@ func (d *Document) initDoc() (err error) {
 
 	d.Initialized = true
 	return nil
+}
+
+func (d *Document) loadText() (err error) {
+	var in []byte
+
+	if d.Path == "<stdin>" {
+		var input []byte
+
+		reader := bufio.NewReader(os.Stdin)
+		for {
+			in, err := reader.ReadByte()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				return err
+			}
+			input = append(input, in)
+		}
+
+		d.Text = string(input)
+	} else {
+		in, err = ioutil.ReadFile(d.Path)
+		if err != nil {
+			return
+		}
+		d.Text = string(in)
+	}
+
+	return nil
+}
+
+func (d *Document) String() string {
+	return d.Title
 }
 
 // readPackageList reads the package list passed in from a document's config
@@ -485,6 +549,19 @@ func MakeWith(r *Render) (s string, err error) {
 	//r.addMacros(macros)
 	cobra.LogV("rendering (render)")
 	out := r.render(root)
+	r.Doc.Output = out
+
+	if r.Doc.Template != "" {
+		tcmd := NewCmdNode(r.Doc.Template, &token{
+			typeof: tokenCmdStart,
+			loc:    Loc(0),
+			lnum:   0,
+			value:  "",
+		})
+		out = r.processCmd(tcmd)
+	}
+
+	r.Doc.Output = out
 	r.Doc.Rendered = true
 	return out, nil
 }

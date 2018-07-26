@@ -10,9 +10,9 @@ import (
 )
 
 var funcMap = template.FuncMap{
-	"title":      strings.Title,
-	"getdata":    GetData,
-	"setdata":    SetData,
+	"title": strings.Title,
+	// "getdata": GetData,
+	// "setdata":    SetData,
 	"add":        add,
 	"sub":        sub,
 	"mul":        mul,

@@ -150,11 +150,19 @@ func makeFile(src, outdir string, folio *core.Folio) (err error) {
 	d := core.NewDoc(srcname, src)
 	folio.AppendDoc(d)
 	d.Text = string(input)
+	// d.Plain = true
 
 	output, err := d.Make()
 	if err != nil {
 		return
 	}
+
+	// d.Text = output
+	// d.Plain = false
+	// output, err = d.Make()
+	// if err != nil {
+	// 	return
+	// }
 
 	outname := d.OutputName
 	if d.OutputName == "" {

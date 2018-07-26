@@ -608,14 +608,31 @@ func (p *parser) initCmd(c *Cmd) (par *Cmd) {
 	c.Block = mac.Block
 	c.Series = mac.Series
 
-	if !p.insideSysCmd && p.parScanOn && !p.insidePar && !c.Block {
-		p.insidePar = true
-		par = NewParBeginNode(c.cmdToken)
-		par.Format = p.doc.Format
-	} else if !p.insideSysCmd && p.parScanOn && p.insidePar && c.Block {
-		p.insidePar = false
-		par = NewParEndNode(c.cmdToken)
-		par.Format = p.doc.Format
+	switch name {
+	case "paragraph.begin":
+		if p.parScanOn && !p.insidePar {
+			p.insidePar = true
+			// par = NewParBeginNode(c.cmdToken)
+			// par.Format = p.doc.Format
+			// *nl = appendNode(*nl, par)
+		}
+	case "paragraph.end":
+		if p.parScanOn && p.insidePar {
+			p.insidePar = false
+			// par = NewParEndNode(c.cmdToken)
+			// par.Format = p.doc.Format
+			// *nl = appendNode(*nl, par)
+		}
+	default:
+		if !p.insideSysCmd && p.parScanOn && !p.insidePar && !c.Block {
+			p.insidePar = true
+			par = NewParBeginNode(c.cmdToken)
+			par.Format = p.doc.Format
+		} else if !p.insideSysCmd && p.parScanOn && p.insidePar && c.Block {
+			p.insidePar = false
+			par = NewParEndNode(c.cmdToken)
+			par.Format = p.doc.Format
+		}
 	}
 
 	return

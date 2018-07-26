@@ -9,10 +9,12 @@ func TestRenderText(t *testing.T) {
 	d := NewDoc("testname", "testpath")
 	d.Text = "hello\n\nworld"
 	f.AppendDoc(d)
+
 	out, err := f.MakeDocs()
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
+
 	exp := "<hello>\n<world>\n"
 	if out != exp {
 		t.Errorf("\nExpected: %q\n     Got: %q", exp, out)
@@ -24,10 +26,12 @@ func TestRenderEcho(t *testing.T) {
 	d := NewDoc("testname", "testpath")
 	d.Text = "•echo{hello\n\nworld}"
 	f.AppendDoc(d)
+
 	out, err := f.MakeDocs()
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
+
 	exp := "<hello>\n<world>\n"
 	if out != exp {
 		t.Errorf("\nExpected: %q\n     Got: %q", exp, out)
@@ -39,10 +43,12 @@ func TestRenderEchoBlock(t *testing.T) {
 	d := NewDoc("testname", "testpath")
 	d.Text = "A\n\n•Echo{hello\n\nworld}\nB"
 	f.AppendDoc(d)
+
 	out, err := f.MakeDocs()
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
+
 	exp := "<A>\nhello\n\nworld\n<B>\n"
 	if out != exp {
 		t.Errorf("\nExpected: %q\n     Got: %q", exp, out)
@@ -63,10 +69,12 @@ hello •test{orl}
 	d := NewDoc("testname", "testpath")
 	d.Text = testText
 	f.AppendDoc(d)
+
 	out, err := f.MakeDocs()
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
+
 	exp := "<hello world>\n"
 	if out != exp {
 		t.Errorf("\nExpected: %q\n     Got: %q", exp, out)
@@ -92,10 +100,12 @@ B
 	d := NewDoc("testname", "testpath")
 	d.Text = testText
 	f.AppendDoc(d)
+
 	out, err := f.MakeDocs()
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
+
 	exp := "<A>\nhello world\n<B>\n"
 	if out != exp {
 		t.Errorf("\nExpected: %q\n     Got: %q", exp, out)
@@ -117,10 +127,12 @@ title: hello
 	d := NewDoc("testname", "testpath")
 	d.Text = testText
 	f.AppendDoc(d)
+
 	out, err := f.MakeDocs()
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
+
 	exp := "<hello world>\n"
 	if out != exp {
 		t.Errorf("\nExpected: %q\n     Got: %q", exp, out)
@@ -141,10 +153,12 @@ func TestRenderData(t *testing.T) {
 	d := NewDoc("testname", "testpath")
 	d.Text = testText
 	f.AppendDoc(d)
+
 	out, err := f.MakeDocs()
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
+
 	exp := "<hello world>\n"
 	if out != exp {
 		t.Errorf("\nExpected: %q\n     Got: %q", exp, out)
@@ -177,7 +191,6 @@ func TestRenderDataDirect(t *testing.T) {
 
 func TestRenderExecAccess(t *testing.T) {
 	var err error
-	//•(exec){[[ setdata "greeting" "hello" ]]}
 	macrodef := `•(exec){[[ setdata "greeting" "hello" ]]}`
 	doctext := `•(exec){[[ .Data.greeting ]]}`
 
@@ -186,11 +199,27 @@ func TestRenderExecAccess(t *testing.T) {
 	if err != nil {
 		t.Errorf("loadMacros: unexepected error: %s", err)
 	}
-	// fname := "testmacros"
-	// stmdoc := NewDoc(fname, "testpath")
-	// stmdoc.Folio = f
-	// ParseMacro(fname, macrodef, stmdoc)
 
+	d := NewDoc("testname", "testpath")
+	d.Text = doctext
+	f.AppendDoc(d)
+
+	out, err := f.MakeDocs()
+	if err != nil {
+		t.Errorf("unexpected error: %s", err)
+	}
+
+	exp := "hello"
+	if out != exp {
+		t.Errorf("\nExpected: %q\n     Got: %q", exp, out)
+	}
+}
+
+func TestRenderExplicitPar(t *testing.T) {
+	var err error
+	doctext := `First•paragraph.end[]Second`
+
+	f := NewFolio()
 	d := NewDoc("testname", "testpath")
 	d.Text = doctext
 	f.AppendDoc(d)
@@ -198,7 +227,27 @@ func TestRenderExecAccess(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error: %s", err)
 	}
-	exp := "hello"
+
+	exp := "<First>\n<Second>\n"
+	if out != exp {
+		t.Errorf("\nExpected: %q\n     Got: %q", exp, out)
+	}
+}
+
+func TestRenderExplicitParBlock(t *testing.T) {
+	var err error
+	doctext := `First•paragraph.end[]•Echo{Second}`
+
+	f := NewFolio()
+	d := NewDoc("testname", "testpath")
+	d.Text = doctext
+	f.AppendDoc(d)
+	out, err := f.MakeDocs()
+	if err != nil {
+		t.Errorf("unexpected error: %s", err)
+	}
+
+	exp := "<First>\nSecond\n"
 	if out != exp {
 		t.Errorf("\nExpected: %q\n     Got: %q", exp, out)
 	}

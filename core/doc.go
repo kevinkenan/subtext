@@ -28,7 +28,7 @@ type Folio struct {
 	PkgSearchPaths  []string          // Where to look for macro packages
 	PkgSearchIndex  int               // Where to begin searching next
 	PkgLocations    map[string]string // Paths to all the known packages
-	Cmd             *cobra.Command    // The command that created the Folio
+	Cmd             *cobra.Command    // The CLI command that created the Folio
 	defaultWarnings map[string]bool   // Map of all default macro warnings
 }
 
@@ -58,6 +58,8 @@ func NewFolio() (f *Folio) {
 	return
 }
 
+// CheckFlag returns true if the flag fname was explicitly set on the command
+// line.
 func (f *Folio) CheckFlag(fname string) (flagged bool) {
 	if f.Cmd == nil {
 		return
@@ -240,6 +242,7 @@ func (f *Folio) loadMacros(fname, fpath, fin string) (err error) {
 	doc.Folio = f
 
 	_, err = MakeWith(&Render{Doc: doc})
+	cobra.Tag("doc").WithField("package", fname).LogV("loaded package")
 
 	return
 }
@@ -316,6 +319,7 @@ func (f *Folio) GetData(key, dflt string) (interface{}, error) {
 	var vals interface{}
 	var found bool
 	vals = f.Data
+
 	for _, k := range keys {
 		switch vals.(type) {
 		case map[string]interface{}:
@@ -332,6 +336,7 @@ func (f *Folio) GetData(key, dflt string) (interface{}, error) {
 			// return nil, fmt.Errorf("key %q not found", key)
 		}
 	}
+
 	return vals, nil
 }
 
@@ -394,15 +399,15 @@ func (d *Document) initDoc() (err error) {
 		return fmt.Errorf("missing end to config section in %q", d.Name)
 	}
 
-	d.contentBegin = confEnd
+	d.contentBegin = confEnd + 1
 	cfg := make(map[interface{}]interface{})
 	if err = yaml.Unmarshal([]byte(d.Text[4:confEnd]), &cfg); err != nil {
 		return fmt.Errorf("unable to read config for %q: %q", d.Name, err)
 	}
-	cobra.Tag("cmd").LogfV("read config for %q", d.Name)
+	cobra.Tag("doc").LogfV("read config for %q", d.Name)
 
 	for k, v := range cfg {
-		cobra.Tag("cmd").Add("key", k).Add("val", v).LogV("setting config parameter")
+		cobra.Tag("doc").Add("key", k).Add("val", v).LogV("setting config parameter")
 		// cobra.Set(k.(string), v)
 		switch k {
 		case "reflow":
@@ -416,9 +421,14 @@ func (d *Document) initDoc() (err error) {
 		case "ignore":
 			d.Ignore = v.(bool)
 		case "output":
-			d.Output = v.(string)
+			d.OutputName = v.(string)
 		case "template":
 			d.Template = v.(string)
+		case "mode":
+			mode := v.(string)
+			if strings.ToLower(mode) == "plain" {
+				d.Plain = true
+			}
 		case "packages":
 			d.Packages, err = readPackageList(v)
 			if err != nil {
@@ -558,7 +568,8 @@ func MakeWith(r *Render) (s string, err error) {
 			lnum:   0,
 			value:  "",
 		})
-		out = r.processCmd(tcmd)
+		tcmd.Format = r.Doc.Format
+		out = r.processPageTemplate(tcmd)
 	}
 
 	r.Doc.Output = out

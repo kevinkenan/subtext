@@ -36,47 +36,49 @@ func Parse(d *Document) (*Section, error) {
 	// }
 
 	return doParse(d.Name, p)
-} // Parse creates a node tree from the tokens produced by scan.
-func ParseText(text string, plain bool, d *Document) (*Section, error) {
-	cobra.Tag("parse").WithField("name", d.Name).Add("plain", d.Plain).LogV("parsing input (parse)")
-
-	s := NewScanner(d.Name, text, plain, d)
-
-	p := &parser{
-		doc:     d,
-		macro:   true,
-		scanner: scanWith(s),
-		root:    NewSection(),
-		empty:   true,
-		// reflow:  d.Reflow,
-	}
-
-	if plain {
-		p.parMode = false
-		p.parScanOn = false
-		p.parScanFlag = false
-		p.insidePar = false
-	} else {
-		p.parMode = true
-		p.parScanOn = true
-		p.parScanFlag = true
-		p.insidePar = false
-	}
-
-	// for _, m := range d.macrosIn {
-	// 	p.macros[MacroType{m.Name, m.Format}] = m
-	// }
-
-	return doParse(d.Name, p)
 }
 
-func ParseMacro(name, input string, doc *Document) (*Section, error) {
+// // Parse creates a node tree from the tokens produced by scan.
+// func ParseText(text string, plain bool, d *Document) (*Section, error) {
+// 	cobra.Tag("parse").WithField("name", d.Name).Add("plain", d.Plain).LogV("parsing input (parse)")
+
+// 	s := NewScanner(d.Name, text, plain, d)
+
+// 	p := &parser{
+// 		doc:     d,
+// 		macro:   true,
+// 		scanner: scanWith(s),
+// 		root:    NewSection(),
+// 		empty:   true,
+// 		// reflow:  d.Reflow,
+// 	}
+
+// 	if plain {
+// 		p.parMode = false
+// 		p.parScanOn = false
+// 		p.parScanFlag = false
+// 		p.insidePar = false
+// 	} else {
+// 		p.parMode = true
+// 		p.parScanOn = true
+// 		p.parScanFlag = true
+// 		p.insidePar = false
+// 	}
+
+// 	// for _, m := range d.macrosIn {
+// 	// 	p.macros[MacroType{m.Name, m.Format}] = m
+// 	// }
+
+// 	return doParse(d.Name, p)
+// }
+
+func ParseMacro(name, input string, doc *Document, depth int) (*Section, error) {
 	// o.Name, o.Default, parseOptions
 	//opts := &Options{Plain: true, Macros: r.macros, Format: n.Format}
 	p := &parser{
 		doc:     doc,
 		macro:   true,
-		scanner: scanMacro(name, input, doc),
+		scanner: scanMacro(name, input, doc, depth),
 		root:    NewSection(),
 		empty:   true,
 		// reflow:  doc.Reflow,
@@ -96,9 +98,9 @@ func ParseMacro(name, input string, doc *Document) (*Section, error) {
 }
 
 // TODO: remove this if unneeded
-func ParsePlain(d *Document) (*Section, error) {
-	return Parse(d)
-}
+// func ParsePlain(d *Document) (*Section, error) {
+// 	return Parse(d)
+// }
 
 func doParse(n string, p *parser) (*Section, error) {
 	cobra.WithField("name", n).LogV("parsing (parse)")
@@ -203,7 +205,7 @@ func (p *parser) nextIf(ttype tokenType) (t *token) {
 	if t = p.next(); t.typeof == ttype {
 		return
 	}
-	p.errorf("found %q instead of %q", t.value, tokenTypeLookup(ttype))
+	p.errorf("found %q instead of %q", tokenTypeLookup(t.typeof), tokenTypeLookup(ttype))
 	return
 }
 
@@ -356,6 +358,9 @@ func (p *parser) eatSpaces() {
 		switch p.next().typeof {
 		case tokenEmptyLine, tokenIndent, tokenLineBreak, tokenSpaceEater:
 			cobra.Tag("parse").LogV("eating space")
+			continue
+		case tokenComment:
+			p.parseComment()
 			continue
 		default:
 			p.backup()
@@ -701,10 +706,16 @@ func (p *parser) parseCmdContext(m *Cmd) (par *Cmd, err error) {
 
 	p.cmdDepth += 1
 
+reparse:
+	p.eatSpaces()
 	t = p.peek()
 	switch t.typeof {
+	case tokenLineBreak:
+		p.next()
+		goto reparse
 	case tokenComment:
 		p.parseComment()
+		goto reparse
 	case tokenName:
 		m.Anonymous = false
 		p.parseNamedArgs(m)
@@ -726,6 +737,7 @@ func (p *parser) parseNamedArgs(m *Cmd) {
 	var err error
 
 	for {
+		p.eatSpaces()
 		t := p.nextIf(tokenName)
 		argName := t.value
 		cobra.Tag("parse").WithField("arg", argName).LogV("parsing named args")
@@ -743,6 +755,7 @@ func (p *parser) parseNamedArgs(m *Cmd) {
 
 		pMap[argName] = nl
 		p.nextIf(tokenRightCurly)
+		p.eatSpaces()
 
 		t = p.peek()
 		if t.typeof == tokenRightSquare {
@@ -757,6 +770,7 @@ func (p *parser) parseNamedArgs(m *Cmd) {
 func (p *parser) parsePostionalArgs(m *Cmd) {
 	var nl NodeList
 	var err error
+	p.eatSpaces()
 	for {
 		p.nextIf(tokenLeftCurly)
 
@@ -772,6 +786,7 @@ func (p *parser) parsePostionalArgs(m *Cmd) {
 		m.ArgList = append(m.ArgList, nl)
 		p.linkNodeList(nl)
 		p.nextIf(tokenRightCurly)
+		p.eatSpaces()
 
 		t := p.peek()
 		if t.typeof == tokenRightSquare {

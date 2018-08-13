@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"text/template"
 	// "os"
 	"strings"
 	// "strconv"
@@ -22,11 +23,12 @@ func (r RenderError) Error() string {
 // needed during the rendering.
 type Render struct {
 	Doc           *Document
-	InParagraph   bool // true indicates that execution is in a paragraph.
-	ParBuffer     *Cmd //
-	depth         int  // tracks recursion depth
-	skipNodeCount int  // skip the next nodes
-	init          bool // true if in init mode (no output is written)
+	InParagraph   bool     // true indicates that execution is in a paragraph.
+	ParBuffer     *Cmd     //
+	depth         int      // tracks recursion depth
+	context       []string // macro/arg call stack
+	skipNodeCount int      // skip the next nodes
+	init          bool     // true if in init mode (no output is written)
 }
 
 func NewRender(d *Document) *Render {
@@ -188,7 +190,7 @@ func (r *Render) exec(n *Cmd) string {
 
 	// Handle commands embedded in the macro.
 	// opts := &Options{Plain: true, Macros: r.macros}
-	output, err := ParseMacro(name, s, r.Doc)
+	output, err := ParseMacro(name, s, r.Doc, r.depth)
 	if err != nil {
 		panic(RenderError{message: fmt.Sprintf("Line %d: error in template for macro %q: %q", n.GetLineNum(), name, err)})
 	} else {
@@ -240,16 +242,76 @@ func (r *Render) setData(n *Cmd, flowStyle bool) {
 
 type cmdArgs map[string]interface{}
 
+func (c cmdArgs) FlagSet(s string) bool {
+	if c["Flags"] == nil {
+		return false
+	}
+
+	switch c["Flags"].(type) {
+	case []string:
+		for _, f := range c["Flags"].([]string) {
+			if f == s {
+				return true
+			}
+		}
+		return false
+	default:
+		return false
+	}
+}
+
 func newCmdArgs(d *Document) (c cmdArgs) {
 	c = make(cmdArgs)
 	c["Doc"] = d
 	c["Data"] = d.Folio.Data
+	// c["Body"] = d.Output
 	return
+}
+
+// processPageTemplate differes from processCmd in that the output of
+// executing the template is not itself rendered. This allows example macro
+// definitions to be placed in the body text. If we used processCmd, those
+// example definitions would be executed.
+func (r *Render) processPageTemplate(n *Cmd) string {
+	name := n.GetCmdName()
+	r.pushContext(name)
+	cobra.Tag("render").WithField("cmd", name).LogV("rendering page template (cmd)")
+	cmdLog := cobra.Tag("cmd")
+
+	// Get the macro definition.
+	m := r.getMacro(name, n.Format)
+	if m == nil {
+		panic(RenderError{message: fmt.Sprintf("Line %d: macro %q (format %q) not defined.", n.GetLineNum(), name, n.Format)})
+	}
+	cmdLog.Copy().Strunc("macro", m.TemplateText).LogfV("retrieved macro definition")
+
+	mac, err := ParseMacro(name, m.TemplateText, r.Doc, r.depth)
+	if err != nil {
+		panic(RenderError{message: fmt.Sprintf("Line %d: error in page template %q: %q", n.GetLineNum(), name, err)})
+	}
+
+	// render the macro and parse the resulting template
+	tmplt := r.render(mac)
+	t := template.Must(template.New(name).Funcs(funcMap).Delims("[[", "]]").Option("missingkey=error").Parse(tmplt))
+
+	// execute the template
+	s := strings.Builder{}
+	data := make(map[string]string)
+	data["Body"] = r.Doc.Output
+	err = t.Delims(m.Ld, m.Rd).Option("missingkey=error").Execute(&s, data)
+	if err != nil {
+		panic(RenderError{fmt.Sprintf("error executing page template %q: %s", name, err)})
+	}
+
+	r.popContext()
+
+	return s.String()
 }
 
 func (r *Render) processCmd(n *Cmd) string {
 	var err error
 	name := n.GetCmdName()
+	r.pushContext(name)
 	cobra.Tag("render").WithField("cmd", name).LogV("rendering command (cmd)")
 	cmdLog := cobra.Tag("cmd")
 
@@ -262,7 +324,7 @@ func (r *Render) processCmd(n *Cmd) string {
 
 	if m.InitTemplate != nil {
 		data := map[string]interface{}{}
-		data["data"] = Data
+		data["Data"] = r.Doc.Folio.Data
 		_, err := r.ExecuteMacro(m, data, true)
 		if err != nil {
 			panic(RenderError{fmt.Sprintf("error executing init template %q: %s", name, err)})
@@ -276,11 +338,14 @@ func (r *Render) processCmd(n *Cmd) string {
 	}
 
 	renArgs := newCmdArgs(r.Doc)
+	renArgs["Flags"] = n.Flags
 	// Load the validated args into a map for easy access.
 	for k, v := range args {
+		renArgs["Context"] = r.context
+		r.pushContext("#" + k)
 		renArgs[k] = r.renderNodeList(v)
-		// renArgs[k] = v.String()
 		cmdLog.Copy().Strunc("arg", k).Strunc("val", renArgs[k]).LogV("prepared command argument")
+		r.popContext()
 	}
 
 	// Apply the command's arguments to the macro.
@@ -299,22 +364,38 @@ func (r *Render) processCmd(n *Cmd) string {
 	// }
 
 	// output, err = ParseText(s, plain, r.Doc)
-	output, err = ParseMacro(name, s, r.Doc)
+	output, err = ParseMacro(name, s, r.Doc, r.depth)
 	if err != nil {
 		panic(RenderError{message: fmt.Sprintf("Line %d: error in template for macro %q: %q", n.GetLineNum(), name, err)})
 	}
-
 	cmdLog.Copy().Add("nodes", output.Count()-1).LogfV("parsed macro, ready for rendering")
+
 	outs := r.render(output)
 
 	if n.Block && !r.Doc.Plain {
 		outs = outs + "\n"
 	}
 
+	r.popContext()
+
 	return outs
 }
 
-func (r *Render) ExecuteMacro(m *Macro, data map[string]interface{}, init bool) (string, error) {
+func (r *Render) pushContext(s string) {
+	r.context = append(r.context, s)
+}
+
+func (r *Render) popContext() string {
+	l := len(r.context)
+	if l == 0 {
+		panic(RenderError{message: fmt.Sprintf("attempted to read past the end of the command context")})
+	}
+	c := r.context[l-1]
+	r.context = r.context[:l-1]
+	return c
+}
+
+func (r *Render) ExecuteMacro(m *Macro, data cmdArgs, init bool) (string, error) {
 	s := strings.Builder{}
 	t := m.Template
 	if init {

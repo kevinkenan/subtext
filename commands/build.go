@@ -45,6 +45,7 @@ func BuildRunE(cmd *cobra.Command, args []string) (err error) {
 	cobra.WithField("files", args).Log("processing")
 	outdir := cobra.GetString("output")
 	f := core.NewFolio()
+	f.Cmd = cmd
 
 	for _, pdir := range cobra.GetStringSlice("package-dir") {
 		path := filepath.Clean(pdir)
@@ -137,6 +138,13 @@ func copyDir(src, outdir string, folio *core.Folio) (err error) {
 		}
 	}
 
+	for _, i := range indexes {
+		err = makeFile(i, outdir, folio)
+		if err != nil {
+			return
+		}
+	}
+
 	return
 }
 
@@ -148,7 +156,10 @@ func makeFile(src, outdir string, folio *core.Folio) (err error) {
 
 	srcname := filepath.Base(src)
 	d := core.NewDoc(srcname, src)
-	folio.AppendDoc(d)
+	err = folio.AppendDoc(d)
+	if err != nil {
+		return
+	}
 	d.Text = string(input)
 	// d.Plain = true
 

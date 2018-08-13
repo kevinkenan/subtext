@@ -225,6 +225,9 @@ var parseTestCases = []parseTestCase{
 		"Text Node",
 		"Cmd Node",
 		"Text Node"}},
+	{"context with comment", newPlainTestDoc("•X[◊\n{a}\n] 4"), "•X[{a}] 4", false, []string{
+		"Cmd Node",
+		"Text Node"}},
 	{"line breaks", newPlainTestDoc("\n\n1\n\n2\n\n3\n"), "\n\n1\n\n2\n\n3\n", false, []string{
 		"Text Node",
 		"Text Node",

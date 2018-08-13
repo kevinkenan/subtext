@@ -38,6 +38,23 @@ func TestRenderEcho(t *testing.T) {
 	}
 }
 
+func TestRenderNestedEcho(t *testing.T) {
+	f := NewFolio()
+	d := NewDoc("testname", "testpath")
+	d.Text = "•echo{•echo{hello}\n\n•echo{world}}"
+	f.AppendDoc(d)
+
+	out, err := f.MakeDocs()
+	if err != nil {
+		t.Errorf("unexpected error: %s", err)
+	}
+
+	exp := "<hello>\n<world>\n"
+	if out != exp {
+		t.Errorf("\nExpected: %q\n     Got: %q", exp, out)
+	}
+}
+
 func TestRenderEchoBlock(t *testing.T) {
 	f := NewFolio()
 	d := NewDoc("testname", "testpath")
@@ -55,16 +72,17 @@ func TestRenderEchoBlock(t *testing.T) {
 	}
 }
 
-func TestRenderMacro(t *testing.T) {
+func TestRenderNestedMacro(t *testing.T) {
 	testText := `
-•(newmacro){
+•(newmacro*){
     name: test
     parameters: ["p"]
-    template: w[[ .p ]]d
-}
+    template: "•echo{hello} w[[ .p ]]d"
+*}
 
-hello •test{orl}
+•test{orl}
 `
+	// testText = fmt.Sprintf(testText, "`")
 	f := NewFolio()
 	d := NewDoc("testname", "testpath")
 	d.Text = testText
@@ -134,6 +152,29 @@ title: hello
 	}
 
 	exp := "<hello world>\n"
+	if out != exp {
+		t.Errorf("\nExpected: %q\n     Got: %q", exp, out)
+	}
+}
+
+func TestRenderPlain(t *testing.T) {
+	testText := `>>>
+title: hello
+mode: plain
+---
+hello world
+`
+	f := NewFolio()
+	d := NewDoc("testname", "testpath")
+	d.Text = testText
+	f.AppendDoc(d)
+
+	out, err := f.MakeDocs()
+	if err != nil {
+		t.Errorf("unexpected error: %s", err)
+	}
+
+	exp := "hello world\n"
 	if out != exp {
 		t.Errorf("\nExpected: %q\n     Got: %q", exp, out)
 	}
@@ -248,6 +289,25 @@ func TestRenderExplicitParBlock(t *testing.T) {
 	}
 
 	exp := "<First>\nSecond\n"
+	if out != exp {
+		t.Errorf("\nExpected: %q\n     Got: %q", exp, out)
+	}
+}
+
+func TestRenderLiteralCmd(t *testing.T) {
+	var err error
+	doctext := "•echo{`• hi}"
+
+	f := NewFolio()
+	d := NewDoc("testname", "testpath")
+	d.Text = doctext
+	f.AppendDoc(d)
+	out, err := f.MakeDocs()
+	if err != nil {
+		t.Errorf("unexpected error: %s", err)
+	}
+
+	exp := "<• hi>\n"
 	if out != exp {
 		t.Errorf("\nExpected: %q\n     Got: %q", exp, out)
 	}

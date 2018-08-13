@@ -129,18 +129,20 @@ type scanFile struct {
 
 // scanner represents the current state.
 type scanner struct {
-	*scanFile              // the current file being scanned
-	fileStack  []*scanFile // stack of files waiting for scans
-	cmdH       string      // rune indicating a horizontal-mode command
-	cmdV       string      // rune indicating a vertical-mode command
-	comment    string      // rune indicating EOL comment
-	parCmd     string      // rune indicating a paragraph command
-	width      Loc         // width of last rune read from input
-	tokens     chan token  // channel of scanned tokens
-	cmdDepth   int         // nesting depth of commands
-	altTerm    bool        // true if '*}' terminates a text block
-	init       bool        // true if in init mode
-	skipConfig bool
+	*scanFile                // the current file being scanned
+	fileStack    []*scanFile // stack of files waiting for scans
+	cmdH         string      // rune indicating a horizontal-mode command
+	cmdV         string      // rune indicating a vertical-mode command
+	comment      string      // rune indicating EOL comment
+	parCmd       string      // rune indicating a paragraph command
+	width        Loc         // width of last rune read from input
+	tokens       chan token  // channel of scanned tokens
+	cmdDepth     int         // nesting depth of commands
+	altTerm      bool        // true if '*}' terminates a text block
+	init         bool        // true if in init mode
+	skipConfig   bool
+	scanLiterals bool // true if the scanner should convert literals to final text
+	inMacroDef   bool // true when scanning inside a macro definition
 	// cmdStack indicates if a command's text block was called from within a
 	// full command (with a context) or from a short command.
 	cmdStack           []*cmdAttrs
@@ -208,13 +210,21 @@ func scan(d *Document) *scanner {
 	cobra.Tag("scan").WithField("name", d.Name).Add("plain", d.Plain).LogV("scanning input (scan)")
 	s := NewScanner(d.Name, d.Text, d.Plain, d)
 	s.pos = Loc(d.contentBegin)
+	s.start = Loc(d.contentBegin)
+	s.scanLiterals = true
 	return scanWith(s)
 }
 
-// scan generates paragraph commands while tokenizing the input string.
-func scanMacro(name, input string, d *Document) *scanner {
+// scanMacro
+func scanMacro(name, input string, d *Document, depth int) *scanner {
 	cobra.Tag("scan").WithField("name", d.Name).Add("plain", d.Plain).LogV("scanning input (scan)")
 	s := NewScanner(name, input, true, d)
+
+	// Scan literals if the output is not inside another macro.
+	if depth <= 1 {
+		s.scanLiterals = true
+	}
+
 	return scanWith(s)
 }
 
@@ -559,9 +569,9 @@ type ƒ func(*scanner) ƒ
 func scanStart(s *scanner) ƒ {
 	cobra.Tag("scan").LogV("scanStart")
 
-	if len(s.input) > 3 && s.input[:3] == ">>>" {
-		s.scanConfig()
-	}
+	// if len(s.input) > 3 && s.input[:3] == ">>>" {
+	// 	s.scanConfig()
+	// }
 
 	s.acceptRun(hSpaceChars)
 
@@ -572,21 +582,21 @@ func scanStart(s *scanner) ƒ {
 	return scanText
 }
 
-func (s *scanner) scanConfig() (err error) {
-	cend := strings.Index(s.input, "---\n")
+// func (s *scanner) scanConfig() (err error) {
+// 	cend := strings.Index(s.input, "---\n")
 
-	if cend == -1 {
-		return fmt.Errorf("missing end to config block")
-	}
+// 	if cend == -1 {
+// 		return fmt.Errorf("missing end to config block")
+// 	}
 
-	if s.skipConfig {
-		s.line = 1 + strings.Count(s.input[:cend], "\n")
-		s.start = Loc(cend + len("---\n"))
-		return
-	}
+// 	if s.skipConfig {
+// 		s.line = 1 + strings.Count(s.input[:cend], "\n")
+// 		s.start = Loc(cend + len("---\n"))
+// 		return
+// 	}
 
-	return nil
-}
+// 	return nil
+// }
 
 func scanText(s *scanner) ƒ {
 	cobra.Tag("scan").LogV("scanText")
@@ -632,11 +642,17 @@ Loop:
 				s.errorf("character %q not a valid character to follow ¶", nxt)
 			}
 		case r == '`':
-			// escaping the next character
-			s.backup()
-			s.emit(tokenText)
-			s.jumpNextRune()
-			s.next()
+			// Literals are converted to text only when we are not inside a
+			// command.
+			if s.scanLiterals && s.cmdDepth == 0 {
+				s.backup()
+				s.emit(tokenText)
+				s.jumpNextRune()
+				s.next()
+			} else {
+				s.emit(tokenText)
+				s.next()
+			}
 		case r == '*' && s.altTerm:
 			if s.cmdDepth > 0 && s.peek() == '}' {
 				s.backup()
@@ -655,7 +671,7 @@ Loop:
 				s.emit(tokenRightCurly)
 				return s.exitTextBlock()
 			}
-		case s.isCmdCmd(r):
+		case s.isCmdCmd(r) && !s.inMacroDef:
 			s.backup()
 			s.emit(tokenText)
 			return scanNewCommand
@@ -725,6 +741,8 @@ func scanNewCommand(s *scanner) ƒ {
 
 	// Determine the command
 	switch r := s.peek(); {
+	case r == '\'', r == '"':
+		fallthrough
 	case isAlphaNumeric(r):
 		cobra.Tag("scan").WithField("mode", s.getCmdMode()).LogV("macro command")
 		s.emitInsertedToken(tokenCmdStart, s.getCmdMode())
@@ -803,6 +821,8 @@ func scanNewCommand(s *scanner) ƒ {
 			s.init = true
 		case "init.end":
 			s.init = false
+		case "newmacro", "newmacrof":
+			s.inMacroDef = true
 		}
 
 		switch s.peek() {
@@ -890,6 +910,7 @@ func scanFullCmd(s *scanner) ƒ {
 			s.emit(tokenRightSquare)
 			s.cmdDepth -= 1
 			cobra.Tag("scan").Add("line", s.line).LogV("done scanning extended command")
+			s.inMacroDef = false
 
 			if s.peek() == '%' {
 				s.next()
@@ -909,7 +930,9 @@ func scanFullCmd(s *scanner) ƒ {
 			// s.backup()
 			s.emit(tokenComment)
 			// scanCommentToggle(s)
-		case isHSpace(r) || isEndOfLine(r):
+		case isEndOfLine(r):
+			s.emit(tokenLineBreak)
+		case isHSpace(r):
 			s.eatSpaces()
 		case isEndOfFile(r):
 			s.errorf("end of file while processing command")
@@ -968,9 +991,19 @@ func scanName(s *scanner) string {
 			s.emit(tokenComment)
 			// scanCommentToggle(s)
 		default:
+			var name string
 			alt := false
-			s.backup()
-			name := s.input[s.start:s.pos]
+
+			switch r {
+			case '\'':
+				name = "sq"
+			case '"':
+				name = "dq"
+			default:
+				s.backup()
+				name = s.input[s.start:s.pos]
+			}
+
 			s.ignore()
 			cobra.Tag("scan").Add("line", s.line).WithField("name", name).LogfV("scanName")
 
@@ -1055,6 +1088,7 @@ func (s *scanner) exitTextBlock() (f ƒ) {
 	} else { // short command
 		s.cmdDepth -= 1
 		cobra.Tag("scan").Tag("scan").LogV("done scanning short command")
+		s.inMacroDef = false
 		if s.peek() == '%' {
 			s.next()
 			s.emit(tokenSpaceEater)

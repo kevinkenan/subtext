@@ -11,8 +11,8 @@ import (
 
 var funcMap = template.FuncMap{
 	"title": strings.Title,
-	// "getdata": GetData,
-	// "setdata":    SetData,
+	// getdata is added by NewFolio() in doc.go
+	// setdata is added by NewFolio() in doc.go
 	"add":        add,
 	"sub":        sub,
 	"mul":        mul,
@@ -20,29 +20,14 @@ var funcMap = template.FuncMap{
 	"strlist":    strlist,
 	"join":       join,
 	"split":      split,
+	"in":         in,
+	"contains":   contains,
 	"addsuffix":  addsuffix,
 	"addprefix":  addprefix,
 	"replaceall": replaceall,
 	"trimspace":  trimspace,
 	"lower":      lower,
 	"upper":      upper,
-}
-
-func GetData(key string) (interface{}, error) {
-	keys := strings.Split(key, ".")
-	var vals interface{}
-	vals = Data
-	for _, k := range keys {
-		switch vals.(type) {
-		case map[string]interface{}:
-			vals = vals.(map[string]interface{})[k]
-		case map[interface{}]interface{}:
-			vals = vals.(map[interface{}]interface{})[k]
-		default:
-			return nil, fmt.Errorf("key %q not found", key)
-		}
-	}
-	return vals, nil
 }
 
 func DumpData(key string) interface{} {
@@ -318,6 +303,63 @@ func strlist(ss []interface{}) ([]string, error) {
 
 func join(sep string, ss []string) string {
 	return strings.Join(ss, sep)
+}
+
+// returns true if v is in l
+func contains(v, l interface{}) (bool, error) {
+	return in(l, v)
+}
+
+// returns true if v is in l
+func in(l, v interface{}) (bool, error) {
+	lv := reflect.ValueOf(l)
+	vv := reflect.ValueOf(v)
+
+	switch lv.Kind() {
+	case reflect.Array, reflect.Slice:
+		// if the slice contains 'interface' elements, then the element needs to be extracted directly to examine its type,
+		// otherwise it will just resolve to 'interface'.
+		var interfaceSlice []interface{}
+		if reflect.TypeOf(l).Elem().Kind() == reflect.Interface {
+			interfaceSlice = l.([]interface{})
+		}
+
+		for i := 0; i < lv.Len(); i++ {
+			var lvv reflect.Value
+			if interfaceSlice != nil {
+				lvv = reflect.ValueOf(interfaceSlice[i])
+			} else {
+				lvv = lv.Index(i)
+			}
+
+			switch lvv.Kind() {
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				switch vv.Kind() {
+				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+					if vv.Int() == lvv.Int() {
+						return true, nil
+					}
+				}
+			case reflect.Float32, reflect.Float64:
+				switch vv.Kind() {
+				case reflect.Float32, reflect.Float64:
+					if vv.Float() == lvv.Float() {
+						return true, nil
+					}
+				}
+			case reflect.String:
+				if vv.Type() == lvv.Type() && vv.String() == lvv.String() {
+					return true, nil
+				}
+			}
+		}
+	case reflect.String:
+		if vv.Type() == lv.Type() && strings.Contains(lv.String(), vv.String()) {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
 
 func addsuffix(suf string, ss []string) []string {

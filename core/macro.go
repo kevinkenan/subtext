@@ -66,6 +66,8 @@ func NewMacroMap() MacroMap {
 		NewBlockMacro("Echo", "[[.text]]", []string{"text"}, nil),
 		NewMacro("paragraph.begin", "<", nil, nil),
 		NewMacro("paragraph.end", ">\n", nil, nil),
+		NewMacro("dq", "“[[ .p ]]”", []string{"p"}, nil),
+		NewMacro("sq", "‘[[ .p ]]’", []string{"p"}, nil),
 		NewMacro("subtext", "subtext, version 0.0.1", nil, nil),
 		NewBlockMacro("Subtext", "subtext, version 0.0.1", nil, nil),
 	}
@@ -223,7 +225,7 @@ func (m *Macro) ValidateArgs(c *Cmd, d *Document) (NodeMap, error) {
 	for _, o := range m.Optionals {
 		if _, found := selected[o.Name]; !found {
 			// nl, _, err := Parse(o.Name, o.Default, parseOptions)
-			nl, err := ParseMacro(o.Name, o.Default, d)
+			nl, err := ParseMacro(o.Name, o.Default, d, 2)
 			if err != nil {
 				return nil, fmt.Errorf("parsing default: %s", err)
 			}

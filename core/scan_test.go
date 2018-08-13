@@ -464,11 +464,13 @@ var commonTestCases = []testCase{
 		tCmdStart,
 		tName,
 		tLeftSquare,
+		tLineBreak,
 		tName,
 		tEqual,
 		tLeftCurly,
 		tText,
 		tRightCurly,
+		tLineBreak,
 		tName,
 		tEqual,
 		tLeftCurly,
@@ -477,13 +479,6 @@ var commonTestCases = []testCase{
 		tRightSquare,
 		tText,
 		tEOF}),
-	newCase("unclosed single command with an incomplete named argument", "1•2[test\n", tokenList{
-		tText,
-		tCmdStart,
-		tName,
-		tLeftSquare,
-		tName,
-		tError}),
 
 	// Flags
 	newCase("command with flags", "•2[<3=4 5>]", tokenList{

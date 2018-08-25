@@ -134,6 +134,7 @@ type parser struct {
 	input    string    //
 	empty    bool      // true if the buffer is empty.
 	buffer   *token    // holds the next token if we peek or backup.
+	pass     int       // which pass, we only parse some items on the second pass
 	prevNode Node      // the previous node
 	// reflow             bool
 	stateStack         []*pstate

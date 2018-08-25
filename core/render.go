@@ -29,6 +29,7 @@ type Render struct {
 	context       []string // macro/arg call stack
 	skipNodeCount int      // skip the next nodes
 	init          bool     // true if in init mode (no output is written)
+	ref           bool     // true if references should be rendered
 }
 
 func NewRender(d *Document) *Render {
@@ -144,6 +145,12 @@ func (r *Render) processSysCmd(n *Cmd) string {
 		r.setData(n, false)
 	case "sys.exec":
 		out = r.exec(n)
+	case "sys.refdef":
+		r.setRef(n, false)
+	case "sys.ref":
+		if r.ref {
+			out = r.getRef(n, false)
+		}
 	case "sys.import":
 	default:
 		panic(RenderError{message: fmt.Sprintf("Line %d: unknown system command: %q", n.GetLineNum(), name)})
@@ -205,6 +212,66 @@ func (r *Render) exec(n *Cmd) string {
 	}
 }
 
+func (r *Render) setRef(cmd *Cmd, flowStyle bool) {
+	cobra.Tag("cmd").LogfV("begin setRef")
+	name := "sys.refdef"
+
+	d := r.getMacro(name, "")
+	if d == nil {
+		panic(RenderError{message: fmt.Sprintf("Line %d: system command %q not defined.", cmd.GetLineNum(), name)})
+	}
+
+	args, err := d.ValidateArgs(cmd, r.Doc)
+	if err != nil {
+		panic(RenderError{message: fmt.Sprintf("Line %d: ValidateArgs failed on %s: %s", cmd.GetLineNum(), name, err)})
+	}
+
+	cobra.Tag("cmd").Strunc("syscmd", args["data"].String()).LogfV("system command: %s", args["data"])
+
+	data := make(map[interface{}]interface{})
+	if flowStyle {
+		err = yaml.Unmarshal([]byte("{"+args["data"].String()+"}"), data)
+	} else {
+		err = yaml.Unmarshal([]byte(args["data"].String()), data)
+	}
+
+	if err != nil {
+		panic(RenderError{message: fmt.Sprintf("Line %d: unmarshall error for system command %q: %q", cmd.GetLineNum(), name, err)})
+	}
+
+	r.Doc.Folio.SetData("ref."+args["label"].String(), args["ref"].String())
+
+	cobra.Tag("cmd").LogfV("end setRef")
+	return
+}
+
+func (r *Render) getRef(cmd *Cmd, flowStyle bool) (out string) {
+	cobra.Tag("cmd").LogfV("begin getRef")
+	name := "sys.ref"
+
+	d := r.getMacro(name, "")
+	if d == nil {
+		panic(RenderError{message: fmt.Sprintf("Line %d: system command %q not defined.", cmd.GetLineNum(), name)})
+	}
+
+	args, err := d.ValidateArgs(cmd, r.Doc)
+	if err != nil {
+		panic(RenderError{message: fmt.Sprintf("Line %d: ValidateArgs failed on %s: %s", cmd.GetLineNum(), name, err)})
+	}
+
+	cobra.Tag("cmd").Strunc("syscmd", args["data"].String()).LogfV("system command: %s", args["data"])
+
+	if ref, found := r.Doc.Folio.Data["ref."+args["label"].String()]; !found {
+		panic(RenderError{message: fmt.Sprintf("line %d: ref '%s' was not found", cmd.GetLineNum(), args["label"].String())})
+	} else {
+		out = string(ref.(string))
+	}
+
+	cobra.Tag("cmd").LogfV("end getRef")
+	return
+}
+
+// TODO: Can I remove this function?
 func (r *Render) setData(n *Cmd, flowStyle bool) {
 	cobra.Tag("cmd").LogfV("begin setData")
 	name := "sys.setdata"
@@ -216,7 +283,7 @@ func (r *Render) setData(n *Cmd, flowStyle bool) {
 
 	args, err := d.ValidateArgs(n, r.Doc)
 	if err != nil {
-		panic(RenderError{message: fmt.Sprintf("Line %d: ValidateArgs failed on system command %q: %q", n.GetLineNum(), name, err)})
+		panic(RenderError{message: fmt.Sprintf("Line %d: ValidateArgs failed on setData %q: %q", n.GetLineNum(), name, err)})
 	}
 
 	cobra.Tag("cmd").Strunc("syscmd", args["data"].String()).LogfV("system command: %s", args["data"])
@@ -235,6 +302,7 @@ func (r *Render) setData(n *Cmd, flowStyle bool) {
 	for k, v := range data {
 		Data[k.(string)] = v
 	}
+	fmt.Println("--- setData", Data)
 
 	cobra.Tag("cmd").LogfV("end setData")
 	return

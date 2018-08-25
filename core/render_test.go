@@ -312,3 +312,28 @@ func TestRenderLiteralCmd(t *testing.T) {
 		t.Errorf("\nExpected: %q\n     Got: %q", exp, out)
 	}
 }
+
+func TestRenderSysRef(t *testing.T) {
+	var err error
+	doctext := `
+•(ref){this}
+•(refdef)[{this}{that}]
+◊•(exec){[[ setdata "foo/what" "ever" ]]}
+◊•(exec){[[ getdata "ref/this" "nope" ]]}
+◊•(exec){[[ .Data ]]}
+`
+
+	f := NewFolio()
+	d := NewDoc("testname", "testpath")
+	d.Text = doctext
+	f.AppendDoc(d)
+	out, err := f.MakeDocs()
+	if err != nil {
+		t.Errorf("unexpected error: %s", err)
+	}
+
+	exp := "<• hi>\n"
+	if out != exp {
+		t.Errorf("\nExpected: %q\n     Got: %q", exp, out)
+	}
+}

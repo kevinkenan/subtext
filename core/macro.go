@@ -61,6 +61,8 @@ func NewMacroMap() MacroMap {
 		NewMacro("sys.import", "", nil, nil),
 		NewMacro("sys.setdata", "", []string{"data"}, nil),
 		NewMacro("sys.setdataf", "", []string{"data"}, nil),
+		NewMacro("sys.refdef", "", []string{"label", "ref"}, nil),
+		NewMacro("sys.ref", "", []string{"label"}, nil),
 		// Regular macros
 		NewMacro("echo", "[[.text]]", []string{"text"}, nil),
 		NewBlockMacro("Echo", "[[.text]]", []string{"text"}, nil),

@@ -316,11 +316,8 @@ func TestRenderLiteralCmd(t *testing.T) {
 func TestRenderSysRef(t *testing.T) {
 	var err error
 	doctext := `
-•(ref){this}
-•(refdef)[{this}{that}]
-◊•(exec){[[ setdata "foo/what" "ever" ]]}
-◊•(exec){[[ getdata "ref/this" "nope" ]]}
-◊•(exec){[[ .Data ]]}
+hello •(ref){this}
+•(refdef)[{this}{world}]
 `
 
 	f := NewFolio()
@@ -332,7 +329,7 @@ func TestRenderSysRef(t *testing.T) {
 		t.Errorf("unexpected error: %s", err)
 	}
 
-	exp := "<• hi>\n"
+	exp := "<hello world\n>\n"
 	if out != exp {
 		t.Errorf("\nExpected: %q\n     Got: %q", exp, out)
 	}

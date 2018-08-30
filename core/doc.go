@@ -558,7 +558,10 @@ func MakeWith(r *Render) (s string, err error) {
 
 	//r.addMacros(macros)
 	cobra.LogV("rendering (render)")
-	out := r.render(root)
+
+	// out := r.render(root)
+	out := r.renderToString(root)
+
 	r.Doc.Output = out
 
 	if r.Doc.Template != "" {

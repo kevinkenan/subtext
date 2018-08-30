@@ -500,13 +500,6 @@ func (s *scanner) nextToken() token {
 	return <-s.tokens
 }
 
-// drain drains the output so the scanning goroutine will exit.
-// Called by the parser, not in the scanning goroutine.
-func (s *scanner) drain() {
-	for range s.tokens {
-	}
-}
-
 // emitInsertedToken creates a token with the given value (which wasn't found
 // in the source text) and sends it to the client.
 func (s *scanner) emitInsertedToken(t tokenType, val string) {
